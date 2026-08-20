@@ -1,8 +1,8 @@
-# 9 条硬约束（团队必守，v1.1.1）
+# 10 条硬约束（团队必守，v1.2.1）
 
 > 这些约束来自对当前已验证流水线的代码级核实（file:line）。违反会直接导致合成失败、站点异常或重复返工。**代码是冻结资产，包装期不修改逻辑；运行期也不得绕过。**
 >
-> v1.1.1 撤销了 v1.1.0 新增的 C10（"episode_hash 命名约定"）——审阅 `scripts/src/feed.py` 第 181 行 `_hash_source(source_rel)` 后确认：`source_hash` 字段的计算**就是源稿（`raw/<slug>.md`）的 SHA256 前 16 位**，它名副其实就是"源稿指纹"，原命名本就清晰。回到 9 条硬约束（C1-C9）。
+> v1.2.1 新增 C11 — 卡兹克活人感抛光必做强阻断（build 前必须 humanize_stage ∈ {reviewed, frozen}）。v1.2.0 是 9 条（C1-C9），v1.2.1 扩展为 10 条（C1-C9 + C11）。
 
 ## C1 — 音频拼接用 ffmpeg，不用 pydub
 - Python 3.13 已移除 `audioop`，pydub 不可用（代码里根本不 import pydub）。
@@ -49,6 +49,7 @@
 - `0` 成功 / `1` 流水线失败（跳过 RSS/站点重建）/ `2` 门禁违规。
 - 禁止在 `run_one` / `run` 内 `raise SystemExit`（只允许在 `main()`/argparse）。
 
+
 ## C8 — 决策门跳过规则
 - frontmatter 同时含 `format`+`voice`+`split_strategy` → 跳过三门交互，尊重作者预决策。
 - 否则 `collect_decisions()` 跑 AI 推荐 + 用户终裁。
@@ -83,3 +84,16 @@
 ---
 
 <!-- v1.1.1: 删除 v1.1.0 误诊的 C10（episode_hash 命名约定）。source_hash 本来就是源稿指纹，命名本来就对。 -->
+
+## C11 — 卡兹克活人感抛光必做强阻断（v1.2.1 新增）
+- **build 前必须** `humanize_stage ∈ {reviewed, frozen}`；否则 PipelineError 抛错（exit 1）。
+- **门禁调用点**：`scripts/src/build.py:run_one()`（Phase 3 入口）；通过 `scripts/src/error_policy.py:stop_and_notify("phase1.5", ...)` 标准化抛错。
+- **豁免**：`build --skip-humanize` flag（仅 CI / 烟雾测试 / 用户显式跳过用）。
+- **生命周期**（`scripts/src/stages.py`）：
+ - `skeleton` → prepare 草稿落盘时由 `init_humanize_stage` 初始化（v1.2.1 新增）
+ - `humanized` → 卡兹克改稿完成（由 script-humanizer 写回）
+ - `reviewed` → 用户评完卡兹克版（`python -m src.stages mark-humanize-reviewed <path>`）
+ - `frozen` → 用户 freeze（不再重生成）
+- **接入**：`prepare.py:prepare_file()` 草稿落盘前调 `init_humanize_stage(f)`；build 入口强检查。
+- **ErrorPolicy**：卡兹克 LLM 失败 → RETRY(3) → 失败 STOP_AND_NOTIFY（不静默降级到原文）。
+- **不被 C11 阻断的场景**：`--skip-humanize` flag + 用户已显式声明豁免。

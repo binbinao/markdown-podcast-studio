@@ -17,3 +17,6 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+
+# pytest 缓存（v1.2.1 单测套件运行时生成）
+.pytest_cache/

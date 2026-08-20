@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Producer Lead"
   zh: "制作总监"
-sop_version: "1.2.0"
+sop_version: "1.2.1"
 maxTurns: 200
 ---
 

@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Publishing Engineer"
   zh: "发布工程师"
-sop_version: "1.2.0"
+sop_version: "1.2.1"
 maxTurns: 60
 ---
 

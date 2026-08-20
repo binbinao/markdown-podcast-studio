@@ -167,6 +167,12 @@ def prepare_file(
             log.warning(f"⚠ PII 扫描失败（不影响 prepare）: {e}")
         f = out_dir / draft_filename(plan)
         f.write_text(script, encoding="utf-8")
+        # v1.2.1：初始化 humanize_stage=skeleton（卡兹克必做门禁的前置条件）
+        try:
+            from .stages import init_humanize_stage
+            init_humanize_stage(f)
+        except Exception as e:  # noqa: BLE001
+            log.warning(f"⚠ init_humanize_stage 失败（不影响 prepare）: {e}")
         made.append(f)
     log.info(f"  {path.name} → 《{series_title}》{len(plans)} 集 → {out_dir}")
     # v1.2.0：emit_phase1 metrics（output/metrics/<date>/phase1.json）

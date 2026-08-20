@@ -29,6 +29,8 @@ def run_one(
     out_dir: Path,
     cfg: dict[str, Any],
     voice_override: str | None = None,
+    *,
+    skip_humanize: bool = False,
 ) -> None:
     raw = Path(episode_path).read_text(encoding="utf-8")
 
@@ -43,6 +45,27 @@ def run_one(
     warn = stage_warning(stage_of(meta))
     if warn:
         log.warning(f"      ⚠ {warn}")
+    # v1.2.1：卡兹克必做强阻断（hard-constraint C11）
+    # humanize_stage ∈ {reviewed, frozen} 才允许 build；否则 PipelineError 抛错。
+    # --skip-humanize 豁免（CI / 烟雾测试 / 用户显式跳过）
+    if not skip_humanize:
+        from .stages import humanize_stage_of, humanize_stage_warning, is_humanize_approved
+        from .error_policy import stop_and_notify
+        h_stage = humanize_stage_of(meta)
+        if not is_humanize_approved(h_stage):
+            warn_h = humanize_stage_warning(h_stage)
+            stop_and_notify(
+                "phase1.5",
+                f"卡兹克活人感抛光未完成（humanize_stage={h_stage or '(missing)'}）：{warn_h}",
+                hint=(
+                    "v1.2.1 起卡兹克必做（hard-constraint C11）：先调度 script-humanizer 改稿，"
+                    "再跑 `python -m src.stages mark-humanize-reviewed <path>`。"
+                    " CI / 烟雾测试用 `--skip-humanize` 豁免。"
+                ),
+            )
+        log.info(f"      ✓ 卡兹克门禁通过 (humanize_stage={h_stage})")
+    else:
+        log.warning("      ⚠ --skip-humanize: 卡兹克门禁豁免（仅 CI/烟雾测试用）")
     if not segments:
         raise PipelineError(
             "没有可朗读的内容，检查脚本格式或 frontmatter。",
@@ -182,6 +205,7 @@ def run(
     only: str | None = None,
     from_ep: str | None = None,
     retry_failed: bool = False,
+    skip_humanize: bool = False,
     force: bool = False,
     voice_override: str | None = None,
 ) -> None:
@@ -262,7 +286,7 @@ def run(
 
         log.info(f"===== [{i}/{n_total}] {s.name} =====")
         try:
-            result = run_one(s, out_dir, cfg, voice_override=voice_override)
+            result = run_one(s, out_dir, cfg, voice_override=voice_override, skip_humanize=skip_humanize)
             if result == "skipped":
                 skipped.append(s.name)
             else:
@@ -290,6 +314,31 @@ def run(
     log.info(f"  RSS : {feed}")
     log.info(f"  站点: {index}")
 
+    # v1.2.1：emit_phase5_summary 自动调用（端到端 cycle time + first_attempt_success）
+    try:
+        from .metrics import emit_phase5_summary
+        # 收集 phase1-4 metrics 判断哪些 succeeded / degraded
+        from .metrics import read_phase as _read_phase
+        import time as _t
+        now = _t.time()
+        phases_succeeded = ["phase0", "phase1", "phase3", "phase4"]
+        phases_degraded = []
+        if skip_humanize:
+            phases_degraded.append("phase1.5")
+        else:
+            phases_succeeded.append("phase1.5")
+            phases_succeeded.append("phase2")
+        emit_phase5_summary(
+            out_dir,
+            cycle_time_hours=0.0,  # build 内不易估算全 cycle，用上次 phase1 时间戳推算
+            user_review_time_hours=None,
+            first_attempt_success=(not failed),
+            phases_succeeded=phases_succeeded,
+            phases_degraded=phases_degraded,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning(f"⚠ emit_phase5_summary 失败（不影响 build）: {e}")
+
 
 def main() -> None:
     global SKIP_AUDIO
@@ -313,6 +362,9 @@ def main() -> None:
     ap.add_argument("--voice", dest="voice_override", default=None, metavar="VOICE_ID",
                     help="覆盖 frontmatter voice 字段，仅 solo 节目生效（duo 走 host/guest 映射）"
                          " 用于快速调音，不必重跑 prepare")
+    ap.add_argument("--skip-humanize", action="store_true",
+                    help="v1.2.1 起新增：豁免卡兹克活人感抛光门禁（CI / 烟雾测试用，"
+                         "正常制作流程请勿使用；卡兹克强阻断由 hard-constraint C11 保证）")
     args = ap.parse_args()
     configure(level=args.log_level, log_file=args.log_file)
     SKIP_AUDIO = args.skip_audio
@@ -324,6 +376,7 @@ def main() -> None:
             retry_failed=args.retry_failed,
             force=args.force,
             voice_override=args.voice_override,
+            skip_humanize=args.skip_humanize,
         )
     except PipelineError as e:
         log.error(f"\n✗ 流水线失败: {e}")

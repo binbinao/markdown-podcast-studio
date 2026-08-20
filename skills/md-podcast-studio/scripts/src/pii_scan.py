@@ -67,7 +67,23 @@ REDACTION_TOKENS: dict[str, str] = {
     "id_card_cn": "[已脱敏身份证]",
     "bank_card":  "[已脱敏银行卡]",
     "ipv4":       "[已脱敏IP]",
+    "name_cn":    "[已脱敏姓名]",
 }
+
+# 中文姓名启发式上下文（v1.2.1 接入 LLM 二次校验）
+# 触发模式：称谓在姓名前或后，姓名 2-3 个汉字（限制避免吞并后续称谓）
+# 第一分支：称谓在前 + 姓名（name 后必须是标点空白或 TITLE_FOLLOW，避免吞并）
+# 第二分支：姓名 + 称谓在后（lookahead 收紧，name 后跟 0+空白 + TITLE_FOLLOW）
+_TITLE_FOLLOW = r"先生|女士|老师|总|哥|姐|兄|弟|小姐|教授|博士|校长|院长|部长|司长|局长|主任|经理"
+_NAME_CONTEXT_RE = re.compile(
+    r"(?:CEO|CTO|COO|CFO|CMO|VP|创始人|总裁|总监|老板|同学|同事|朋友|客户|嘉宾|主播|主持|讲师|合作伙伴)"
+    r"\s+"
+    r"(?P<name>[一-龥]{2,3})"
+    r"(?=\s*(?:[,，。.!?:；]|\Z)|(?=" + _TITLE_FOLLOW + r"))"
+    r"|(?<![一-龥])"
+    r"(?P<name2>[一-龥]{2,3})"
+    r"(?=\s*(?:" + _TITLE_FOLLOW + r"))"
+)
 
 
 def _compile_patterns(enabled: list[str]) -> dict[str, re.Pattern[str]]:
@@ -109,20 +125,99 @@ def _apply_redactions(text: str, matches: list[PIIMatch]) -> str:
     return out
 
 
+def _find_name_suspects(text: str, existing_matches: list[PIIMatch]) -> list[tuple[int, int, str]]:
+    """v1.2.1：找启发式上下文疑似的姓名位置。
+
+    返回 [(start, end, name)]；排除已被正则匹配的位置。
+    """
+    out: list[tuple[int, int, str]] = []
+    seen: set[tuple[int, int]] = set()
+    for m in _NAME_CONTEXT_RE.finditer(text):
+        # 两条分支共享同名 group 不可行（re 不支持），用 group("name") 或 group("name2")
+        name = m.group("name") or m.group("name2")
+        if not name:
+            continue
+        # groupdict() 中只有匹配上的那个有值，另一个是 None
+        s = (m.start("name") if m.group("name") else m.start("name2"))
+        e = (m.end("name") if m.group("name") else m.end("name2"))
+        # 排除已被现有正则匹配覆盖的位置
+        if any(pm.start <= s and e <= pm.end for pm in existing_matches):
+            continue
+        if (s, e) in seen:
+            continue
+        seen.add((s, e))
+        out.append((s, e, name))
+    return out
+
+
 def _maybe_llm_verify(
     text: str,
     matches: list[PIIMatch],
     cfg: dict[str, Any],
 ) -> tuple[list[PIIMatch], bool, str | None]:
-    """可选：LLM 二次校验（识别中文姓名等启发式难覆盖的）。
+    """v1.2.1：LLM 二次校验识别中文姓名（启发式难覆盖）。
 
-    v1.2.0：默认关闭（llm_verify=false），避免引入新依赖。
-    开启时需 cfg.pii.llm_provider / model 配置（后续 v1.2.1 接线）。
+    设计：
+    1. 默认关闭（llm_verify=false），失败 fallback 正则-only 不阻塞
+    2. 开启时：启发式找"上下文疑似姓名" → 调 LLM 确认 → 添加到 matches
+    3. 复用 `polish.llm_complete()`（已有 LLM helper）
+
+    cfg.pii 配置：
+    - llm_verify: bool（默认 False）
+    - llm_provider / llm_model / llm_api_key_env（透传给 polish.llm_complete）
     """
-    if not cfg.get("pii", {}).get("llm_verify", False):
+    pii_cfg = (cfg or {}).get("pii", {})
+    if not pii_cfg.get("llm_verify", False):
         return matches, False, None
-    # v1.2.0 占位（v1.2.1 接线 LLM provider）
-    return matches, False, "llm_verify not yet wired (v1.2.1 candidate)"
+
+    suspects = _find_name_suspects(text, matches)
+    if not suspects:
+        return matches, False, None
+
+    try:
+        from .polish import llm_complete as _llm_complete
+    except ImportError:
+        return matches, False, "polish.llm_complete 不可用，llm_verify 跳过"
+
+    # 构建 prompt：让 LLM 逐个判断
+    numbered = "\n".join(f"{i+1}. {name}" for i, (_, _, name) in suspects)
+    system_prompt = (
+        "你是中文 PII 识别助手。用户给一组 2-4 字汉字（候选姓名），"
+        "判断哪些是真人的姓名（不是产品名 / 公司名 / 抽象词）。"
+        "只输出编号+结果，每行一个，格式："
+        "N:确认 或 N:否定（不解释）。如果都不确认，输出：none"
+    )
+    user_prompt = f"候选列表：\n{numbered}\n"
+
+    try:
+        raw = _llm_complete(system_prompt, user_prompt, cfg)
+    except Exception as e:  # noqa: BLE001
+        # LLM 调用失败 → fallback 正则-only，不阻塞
+        return matches, False, f"llm_verify 调用失败（fallback 正则-only）: {e}"
+
+    # 解析 LLM 输出
+    verified: list[PIIMatch] = []
+    for line in raw.strip().splitlines():
+        line = line.strip()
+        if not line or line.lower() == "none":
+            continue
+        m = re.match(r"^\s*(\d+)\s*[:：]\s*(确认|肯定|是|yes|y|true)\s*$", line, re.I)
+        if not m:
+            continue
+        idx = int(m.group(1)) - 1
+        if not (0 <= idx < len(suspects)):
+            continue
+        s, e, name = suspects[idx]
+        verified.append(PIIMatch(
+            pattern="name_cn",
+            value=name,
+            redacted=REDACTION_TOKENS["name_cn"],
+            start=s,
+            end=e,
+            llm_verified=True,
+        ))
+
+    return matches + verified, True, None
 
 
 def process(text: str, cfg: dict[str, Any] | None = None) -> PIIResult:

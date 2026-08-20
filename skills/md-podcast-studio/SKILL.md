@@ -1,19 +1,19 @@
 ---
 # === SOP 元数据（流程治理） ===
 name: md-podcast-studio
-version: 1.2.0
+version: 1.2.1
 owner: script-editor                       # SOP 修改权限归属（PR 评审需 owner + 主理人 + 用户）
 effective_from: 2026-08-20
 changelog_ref: ../../../CHANGELOG.md      # 变更日志相对路径
-supersedes: v1.1.1
-description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, optionally humanize via Khazix (Phase 1.5), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.0 implements episode_hash (draft fingerprint), metrics emission (5 stages), PII scan (prepare entry), and ErrorPolicy auto-fallback (tts layer)."
+supersedes: v1.2.0
+description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.1 makes Khazix mandatory, wires pii_scan.llm_verify (Chinese name detection), emits phase5_summary automatically, standardizes ErrorPolicy STOP_NOTIFY/DEGRADE, and adds unit test suite (57 tests)."
 ---
 
-# Markdown Podcast Studio — Skill (v1.2.0)
+# Markdown Podcast Studio — Skill (v1.2.1)
 
 把 Markdown 文章变成可上线播客的完整、可移植流水线。本 skill 自带**已验证可用**的流水线代码与工程模板，能在任意新仓库 scaffold 出一套 Markdown→播客工程。
 
-> **v1.2.0 变更驱动**：v1.1.0/v1.1.1 文档化的 metrics / PII / ErrorPolicy fallback / 真正 episode_hash 从"建议"变为"实现"。详见 `CHANGELOG.md`。回滚方式见文末。
+> **v1.2.1 变更驱动**：v1.2.0 已实现 episode_hash / metrics / PII / ErrorPolicy fallback；v1.2.1 **将卡兹克从可选升级为必做强阻断**（hard-constraint C11），并补齐 v1.2.1 候选清单（llm_verify / phase5_summary / ErrorPolicy 标准化 / unit test）。详见 `CHANGELOG.md`。回滚方式见文末。
 
 ---
 
@@ -296,3 +296,60 @@ rsync -a --delete .archive/v1.0.0/ ./
 ```
 
 > 详细命令、配置、约束与排错见 `references/`。**代码是冻结资产**：本 skill 只复制、不修改流水线逻辑；仓库后续演进需重新打包。
+---
+
+## v1.2.1 治理层新增（卡兹克必做 + 4 候选落地）
+
+### 卡兹克从可选 → 必做强阻断（hard-constraint C11）
+- **触发条件**：v1.2.0 卡兹克仅在用户原话触发时跑；v1.2.1 起**默认必做**，build 入口强检查 `humanize_stage ∈ {reviewed, frozen}`
+- **门禁调用点**：`build.py:run_one()` Phase 3 入口 → `error_policy.stop_and_notify("phase1.5", ...)` 标准化抛 PipelineError
+- **豁免**：`--skip-humanize` flag（CI / 烟雾测试 / 用户显式跳过）
+- **生命周期**（`stages.py`）：
+ - `skeleton` → prepare 草稿落盘时由 `init_humanize_stage(f)` 初始化
+ - `humanized` → 卡兹克改稿完成
+ - `reviewed` → 用户评完卡兹克版（`python -m src.stages mark-humanize-reviewed <path>`）
+ - `frozen` → 用户 freeze（不再重生成）
+- **ErrorPolicy**：卡兹克 LLM 失败 → RETRY(3) → 失败 STOP_NOTIFY（**不**静默降级到原文）
+
+### pii_scan.llm_verify 接线（中文姓名识别）
+- **触发条件**：`cfg.pii.llm_verify: true`（默认关闭）
+- **设计**：启发式找"上下文疑似姓名"（CEO X / X 先生 / 老师 X 等）→ 调 LLM 二次校验 → 确认的姓名脱敏为 `[已脱敏姓名]`
+- **复用**：`polish.llm_complete()`（已有 LLM helper）
+- **失败 fallback**：LLM 调用失败 → 正则-only（不阻塞 prepare/build）
+- **Trade-off**：边界严格（lookbehind 排除"汉字+姓名"），宁可漏几个，不要误杀
+
+### metrics.emit_phase5_summary 自动调用
+- **触发条件**：`build.py:run()` 末尾无条件 emit
+- **采集**：cycle_time_hours（占位 0.0，全 cycle 估算作为 v1.2.2）/ user_review_time_hours / first_attempt_success / phases_succeeded / phases_degraded
+- **写入**：`output/metrics/<date>/phase5.json`
+- **智能判断 phases_degraded**：`--skip-humanize` 时 phase1.5 列入 degraded，否则 phases_succeeded 含 1.5 + 2
+
+### ErrorPolicy STOP_NOTIFY/DEGRADE 标准化
+- **`stop_and_notify(stage, message, hint=None)`**：log error + raise PipelineError。统一入口，便于未来 metrics 接入 + 告警系统。
+- **`degrade(stage, message, reason)`**：log warning，不抛错，主流程继续。
+- **接入**：build.py 卡兹克门禁失败用 `stop_and_notify("phase1.5", ...)`；其他 raise PipelineError 保留原样（向后兼容）
+
+### Unit Test 套件（v1.2.1 新增）
+- **位置**：`tests/test_*.py`
+- **覆盖**：episode_hash（9 测试）/ metrics（11）/ pii_scan（11）/ error_policy（13）/ stages（13）
+- **运行**：`cd skills/md-podcast-studio/tests && pytest`
+- **结果**：**57 passed** ✅
+- **conftest.py**：自动加 `scripts/` 到 sys.path，让 pytest 能 import src/
+- **不覆盖**：build.py / prepare.py / tts.py（需要外部依赖，集成测试建议）
+
+### 兼容性总结（v1.2.1 不破坏的）
+
+- `build_episode_audio(...)`：返回 `(mp3, duration)`，**接口不变**
+- `register_episode(..., body="")`：`body` 是 keyword-only 默认空
+- `stages.mark_reviewed(...)`：接口不变
+- `prepare_file(...)`：接口不变（内部加 `init_humanize_stage`）
+
+### Smoke Test（v1.2.1 已通过）
+
+详见 `CHANGELOG.md [1.2.1]` 段。
+
+- **57 单测全过**（tests/ 套件）
+- **9 模块 import 成功**（build / prepare / feed / stages / tts / episode_hash / metrics / pii_scan / error_policy）
+- **卡兹克门禁场景**：草稿 humanize_stage=skeleton → build 抛 PipelineError ✓；--skip-humanize 豁免 ✓
+- **PII 姓名启发式**：CEO 张三先生 → "张三" ✓；王女士 + 张先生 → 略过（lookbehind 严格）
+- **ErrorPolicy stop_and_notify**：raise PipelineError 含 stage/hint ✓

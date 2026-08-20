@@ -4,6 +4,65 @@
 
 ---
 
+## [1.2.1] — 2026-08-20 — 卡兹克必做强阻断 + 4 候选落地
+
+> **变更驱动**：用户要求"继续 v1.2.1 且把卡兹克审稿设定为必做"。这是 v1.2.0 的延伸 + **卡兹克从可选升级为必做强阻断**（hard-constraint C11）。
+> **变更范围**：`scripts/src/` 改造（卡兹克门禁 / llm_verify / phase5_summary / ErrorPolicy 标准化）+ 新增 `tests/` 单测套件 + 文档同步。**首次在 src/ 落地"硬门禁"逻辑**（v1.2.0 主要是 metrics/PII/fallback 软接入）。
+> **回滚**：`git checkout v1.2.0 -- .` 或 `rsync -a --delete .archive/v1.2.0/ ./`
+
+### Added（src/ 硬门禁 + 4 候选落地）
+
+- **卡兹克必做强阻断（hard-constraint C11 新增）**：
+ - `stages.py`：`HUMANIZE_*` 4 阶段常量 + `humanize_stage_of` / `is_humanize_approved` / `humanize_stage_warning` / `set_humanize_stage` / `mark_humanize_reviewed` / `init_humanize_stage`
+ - `build.py:run_one()` Phase 3 入口加 humanize_stage 检查 → `error_policy.stop_and_notify("phase1.5", ...)` 标准化抛错
+ - `build.py:run()` 加 `--skip-humanize` flag（豁免：CI / 烟雾测试）
+ - `prepare.py:prepare_file()` 草稿落盘前 `init_humanize_stage(f)`
+ - **关键决策**：卡兹克 LLM 失败 → RETRY(3) → STOP_AND_NOTIFY（不静默降级到原文）
+- **`pii_scan.py` llm_verify 接线**：
+ - 中文姓名启发式上下文正则（`CEO X` / `X 先生` / `X 老师` 等）
+ - 调用 `polish.llm_complete()` 做二次校验
+ - 失败 fallback 正则-only（不阻塞）
+ - Trade-off：边界严格（lookbehind 排除"汉字+姓名"），宁可漏几个，不要误杀
+- **`metrics.py` emit_phase5_summary 自动调用**：在 `build.py:run()` 末尾无条件 emit，采集 first_attempt_success + phases_succeeded/degraded
+- **`error_policy.py` 标准化**：`stop_and_notify(stage, message, hint)` / `degrade(stage, message, reason)` helper
+- **`tests/` 套件**（新目录）：`test_episode_hash.py` (9) / `test_metrics.py` (11) / `test_pii_scan.py` (11) / `test_error_policy.py` (13) / `test_stages.py` (13) = **57 tests passing**
+- **`tests/conftest.py`**：自动加 `scripts/` 到 sys.path，pytest discoverable
+- **`references/hard-constraints.md` C11 新增**：卡兹克活人感抛光必做强阻断（10 条硬约束，从 v1.2.0 的 9 条扩展）
+
+### Changed
+
+- **`stages.py`**：扩展支持 humanize_stage 4 阶段生命周期（与 ai_stage 并列），公开 `humanize_stage_of` / `is_humanize_approved` 等函数
+- **`prepare.py:prepare_file()`**：草稿落盘后追加 `init_humanize_stage(f)`（best-effort，失败不阻塞）
+- **`build.py:run()`**：末尾 emit `phase5_summary`（best-effort，失败不阻塞）
+- **`.codebuddy-plugin/plugin.json`**：version 1.2.0 → 1.2.1 / description 改写（"REQUIRED humanize"）
+- **5 个 agent MD 文件**：sop_version + description 同步（卡兹克从"可选"升级为"REQUIRED"）
+- **`README.md` / `SKILL.md`**：v1.2.1 关键能力 + C11 + 57 测试段
+
+### 兼容性（关键）
+
+- `build_episode_audio(...)` / `stages.mark_reviewed(...)` / `prepare_file(...)`：**接口不变**，内部追加 humanize_stage 生命周期
+- `register_episode(..., body="")`：**接口不变**（v1.2.0 已 keyword-only）
+- `--skip-humanize` flag：**可选参数**，默认 False（强阻断开启）
+
+### Smoke Test（已通过）
+
+- ✅ 57/57 单测通过（pytest）
+- ✅ 9 模块 import 成功
+- ✅ 卡兹克门禁：草稿 humanize_stage=skeleton → build 抛 PipelineError
+- ✅ --skip-humanize 豁免
+- ✅ PII 中文姓名识别：CEO 张三先生 → "张三"（边界严格 trade-off）
+- ✅ ErrorPolicy stop_and_notify → raise PipelineError 含 stage/hint
+
+### Future / Out of Scope（v1.2.2 候选）
+
+- `metrics.cycle_time_hours` 全 cycle 估算（当前 build 内难算，用上次 phase1 时间戳推算）
+- `ErrorPolicy.STOP_NOTIFY` 接入告警系统（Slack / email）
+- ErrorPolicy DEGRADE 接入 validate_script 软告警场景
+- 集成测试（build.py / prepare.py / tts.py 需外部依赖）
+- `--skip-humanize` 加更细粒度
+
+---
+
 ## [1.2.0] — 2026-08-20 — src/ 实际改造（4 候选落地）
 
 > **变更驱动**：v1.1.0/v1.1.1 文档化的 metrics / PII / ErrorPolicy fallback / 真正 episode_hash 从"建议"变为"实现"。

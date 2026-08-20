@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Voice Director"
   zh: "配音导演"
-sop_version: "1.2.0"
+sop_version: "1.2.1"
 maxTurns: 60
 ---
 

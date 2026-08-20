@@ -1,8 +1,8 @@
 # Markdown Podcast Studio
 
-把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 →（可选卡兹克活人感抛光）→ AI 配音（MiniMax / edge-tts / fish-speech 三后端，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
+把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 → **卡兹克活人感抛光（v1.2.1 必做强阻断 C11）** → AI 配音（MiniMax / edge-tts / fish-speech 三后端，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
 
-> **当前版本：v1.2.0**（2026-08-20）— src/ 实际改造：episode_hash 草稿指纹 + metrics 5 阶段采集 + PII 扫描接入 + ErrorPolicy 自动 fallback。
+> **当前版本：v1.2.1**（2026-08-20）— 卡兹克从可选升级为必做强阻断（hard-constraint C11）+ 4 候选落地（humanize_stage 生命周期 + llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy 标准化）+ 57 单测。
 > 详见 [CHANGELOG.md](./CHANGELOG.md)。回滚方式见文末。
 
 ## 类型
@@ -68,11 +68,14 @@ Team 型（多角色协作团队，5 人）
 - 「用双人对话模式重新生成这期节目」
 - 「构建并发布节目站到 GitHub Pages」
 
-## 回滚（三档）
+## 回滚（四档）
 
 ```bash
-# v1.2.0 → v1.1.1（去掉 src/ 改造，回到"建议"状态）
+# v1.2.1 → v1.2.0（去掉卡兹克必做强阻断 + 4 候选落地，回到 v1.2.0 卡兹克可选状态）
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+git checkout v1.2.0 -- .
+
+# v1.2.0 → v1.1.1（去掉 src/ 改造，回到"建议"状态）
 git checkout v1.1.1 -- .
 
 # v1.1.1 → v1.1.0（去掉 R1 真相 hotfix，回到含误诊的 v1.1.0）
@@ -83,6 +86,7 @@ git checkout v1.0.0 -- .
 
 # 物理归档应急回滚（git 损坏 / tag 误删时）
 rsync -a --delete .archive/v1.0.0/ ./
+rsync -a --delete .archive/v1.2.0/ ./
 ```
 
 > **v1.2.0 src/ 改造向后兼容**：register_episode 的 `body` 是 keyword-only 默认 `""`，build_episode_audio 返回 2 元组（不变），stages.mark_reviewed / prepare_file 接口不变。所以 v1.2.0 → v1.1.1 回滚后，旧调用方式不受影响。

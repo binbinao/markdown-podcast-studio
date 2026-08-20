@@ -128,4 +128,49 @@ __all__ = [
     "is_retryable_exception",
     "apply_policy",
     "record_metrics",
+    "stop_and_notify",
+    "degrade",
+]
+
+
+def stop_and_notify(stage: str, message: str, *, hint: str | None = None) -> None:
+    """v1.2.1：标准化 STOP_AND_NOTIFY 抛错。
+
+    行为：log error + raise PipelineError。统一入口，便于：
+    1. 后续接入 metrics 自动记录（v1.2.2 候选）
+    2. 后续接入告警系统 / Slack 通知
+
+    用法：
+        stop_and_notify("phase2", "卡兹克门禁未通过", hint="调度 script-humanizer 后再 build")
+    """
+    from .log import logger as log
+    log.error(f"[{stage}] {message}")
+    # 延迟 import 避免循环
+    from .core import PipelineError
+    raise PipelineError(message, hint=hint)
+
+
+def degrade(stage: str, message: str, *, reason: str) -> None:
+    """v1.2.1：标准化 DEGRADE（不抛错，仅记录 + warn）。
+
+    行为：log warning，主流程继续；标记 metrics 阶段为 degraded。
+    """
+    from .log import logger as log
+    log.warning(f"[{stage}] DEGRADE: {message}（reason: {reason}）")
+
+
+__all__ = [
+    "STOP_AND_NOTIFY",
+    "RETRY_WITH_BACKOFF",
+    "FALLBACK_BACKEND",
+    "DEGRADE",
+    "ALL_POLICIES",
+    "RetryConfig",
+    "default_retry_config",
+    "should_retry",
+    "is_retryable_exception",
+    "apply_policy",
+    "record_metrics",
+    "stop_and_notify",
+    "degrade",
 ]

@@ -1,7 +1,7 @@
 {
   "name": "markdown-podcast-studio",
-  "version": "1.2.0",
-  "description": "v1.2.0 src/ 实际改造：episode_hash 草稿指纹（双 hash 续跑）+ metrics 实际采集（5 阶段）+ PII 扫描接入 prepare + ErrorPolicy 自动 fallback（主 backend 失败 → edge-tts）。",
+  "version": "1.2.1",
+  "description": "v1.2.1 卡兹克必做强阻断（C11）+ 4 候选落地：humanize_stage 生命周期（skeleton/humanized/reviewed/frozen）+ build 强门禁（--skip-humanize 豁免）+ pii_scan.llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy STOP_NOTIFY/DEGRADE + 57 单测。",
   "author": {
     "name": "纪多斌",
     "email": "duobin.ji@example.com"
@@ -33,8 +33,8 @@
     "zh": "Markdown 播客工作室"
   },
   "displayDescription": {
-    "en": "Turn Markdown articles into a published podcast: smart script splitting, optional Khazix human-voice polish, AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.0: episode_hash 草稿指纹 + 双 hash 续跑 + metrics 实际采集 + PII 扫描接入 + ErrorPolicy 自动 fallback。",
-    "zh": "v1.2.0 src/ 实际改造：episode_hash 草稿指纹（双 hash 续跑）+ metrics 5 阶段采集 + PII 扫描接入 prepare + ErrorPolicy 自动 fallback（主 backend 失败 → edge-tts）。功能不变：SOP 元数据 + 5 决策点 + 7×4 RACI + 3 道评审门。"
+    "en": "Turn Markdown articles into a published podcast: smart script splitting, REQUIRED Khazix human-voice polish (hard-gate C11), AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.1: Khazix mandatory + pii_scan.llm_verify + phase5_summary + ErrorPolicy STOP_NOTIFY/DEGRADE + 57 unit tests.",
+    "zh": "v1.2.1 卡兹克必做强阻断（C11）+ 4 候选落地：humanize_stage 生命周期 + build 强门禁 + llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy 标准化 + 57 单测。功能不变：SOP 元数据 + 5 决策点 + 7×4 RACI + 双 hash 续跑。"
   },
   "avatar": "avatars/markdown-podcast-studio-team-lead.png",
   "categoryId": "06-ContentCreative",
@@ -47,7 +47,7 @@
     { "en": "Markdown-to-Podcast", "zh": "文字转播客" },
     { "en": "Content Pipeline", "zh": "内容流水线" },
     { "en": "Audio Production", "zh": "音频制作" },
-    { "en": "PII & Metrics v1.2.0", "zh": "PII + 度量 v1.2.0" }
+    { "en": "Required Khazix Gate v1.2.1", "zh": "卡兹克必做强阻断 v1.2.1" }
   ],
   "quickPrompts": [
     { "en": "Turn this Markdown into a podcast episode", "zh": "把这篇 Markdown 变成一档播客" },
