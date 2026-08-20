@@ -1,6 +1,8 @@
-# 8 条硬约束（团队必守）
+# 10 条硬约束（团队必守，v1.1.0）
 
 > 这些约束来自对当前已验证流水线的代码级核实（file:line）。违反会直接导致合成失败、站点异常或重复返工。**代码是冻结资产，包装期不修改逻辑；运行期也不得绕过。**
+>
+> v1.1.0 在原 8 条（C1-C8 = C9 错位排序后）基础上**新增 C10（episode_hash 命名约定）**，并**改名文档层 source_hash → episode_hash**（代码层字段名保留作为别名，向后兼容）。
 
 ## C1 — 音频拼接用 ffmpeg，不用 pydub
 - Python 3.13 已移除 `audioop`，pydub 不可用（代码里根本不 import pydub）。
@@ -30,10 +32,16 @@
 - `split._strip_md` 用 `re.sub(r"^-{3,}\s*$\n?", "", t, flags=re.M)` 剔除。
 - 原因：分集用 `---` 分节，残留 `---` 行无法被 edge-tts 合成（报 "No audio was received"），长系列全卡死。
 
-## C6 — build 对 drafts 只读
+## C6 — build 对 drafts 只读（**含 v1.1.0 episode_hash 澄清**）
 - `run_one` **不得**调 `polish()`（有 AST 测试 `TestBuildReadOnlyContract` 看守：build 一旦 import/call `polish` 即 fail）。
 - 草稿是 LLM 产物只读；build 再改会吃掉人工修改、成本翻倍、不可复现。
 - 改草稿必须先 `--mark-reviewed` / `--freeze` 再 build。
+
+**v1.1.0 episode_hash 行为**：
+- 卡兹克（Phase 1.5）走 in-place 改稿后，**`episode_hash` 实际已变**（它是"当前草稿正文内容指纹"，源稿哈希另有 `source_text_hash`）。
+- build 据 `episode_hash` 决定是否重生成 mp3：卡兹克改稿 → `episode_hash` 变 → build 视为新草稿重生成 mp3（**这是预期行为，不是数据血缘断裂**）。
+- 想保留老音频：改前先 `git commit` 当前 mp3 + 记 `episode_hash`，改后 `--skip-audio --force` 只重渲站点。
+- 详见 **C10（episode_hash 命名约定）**。
 
 ## C7 — 退出码契约
 - `0` 成功 / `1` 流水线失败（跳过 RSS/站点重建）/ `2` 门禁违规。
@@ -69,3 +77,41 @@
 - emotion `(happy)(sad)...` 内联标签与 minimax emotion 字段不对齐，**v1 不做转换**（pass-through 透传，鱼音会忽略）。
 - 多说话人 dialog `<|speaker:N|>` 标记 v1 不启用。
 - 无 self-host 路径（方案 B 待实现）。
+
+---
+
+## C10 — episode_hash 命名约定（**v1.1.0 新增**）
+
+> **目的**：避免"R1 数据血缘断裂"的误解——卡兹克写回草稿后音频也变其实是**预期**。
+
+### 三个 hash 字段的语义边界
+
+| 字段 | 语义 | 谁写 | 何时变 |
+|---|---|---|---|
+| **`source_text_hash`** | 源稿（`raw/<slug>.md`）内容指纹 | `prepare.ingest` 一次性写入 | 永不（源稿不动） |
+| **`episode_hash`**（v1.1.0 改名） | **当前**草稿正文内容指纹 | `build.register_episode` 每次 build 重算 | 草稿正文变更时变（卡兹克写回会触发）|
+| `source_hash`（代码层别名）| 同 `episode_hash` | 同上 | 同上 |
+
+### 改名原因（v1.1.0）
+- 旧名 `source_hash` 容易被误读为"源稿哈希"（实际是"当前草稿哈希"）
+- 改名后语义清晰：源稿有 `source_text_hash`；当前稿有 `episode_hash`；二者**不混淆**
+
+### 兼容性（关键）
+- **代码层字段名仍为 `source_hash`**（`scripts/src/build.py` 的 `register_episode` 函数签名不变）
+- **文档层统一用 `episode_hash`**，并在第一次出现时写"代码层仍叫 source_hash"
+- 用户 / 上层工具读 YAML 时，两个名字都接受
+
+### 决策矩阵
+
+| 场景 | 行为 | 是否重生成 mp3 |
+|---|---|---|
+| 只改 `raw/<slug>.md` 源稿 | `source_text_hash` 变；`episode_hash` 也变（草稿重生成）| **是** |
+| 只跑 Phase 1.5 卡兹克写回 | `episode_hash` 变（正文改了）；`source_text_hash` 不变 | **是**（预期）|
+| 用户评审改了几个字 | `episode_hash` 变 | **是**（小成本）|
+| 只想改 frontmatter（不动正文）| `episode_hash` 不变（YAML 不计入正文指纹）| 否 |
+| 只想重渲站点不动音频 | `python -m src.build drafts/ --skip-audio --force` | 否（skip-audio）|
+
+### 排错
+- 改稿后音频"无故"重生成 → 这是预期（C10）
+- 想保留老音频 → 改前先 `git commit` 当前 mp3 + 记 `episode_hash`，改后 `--skip-audio --force` 只重渲站点
+- 想知道当前 `episode_hash` → 读 `output/manifest.json` 或 `series/<slug>/ep-XX/manifest.json`（代码层字段为 `source_hash`）

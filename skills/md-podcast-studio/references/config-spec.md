@@ -68,3 +68,35 @@ duo 另需 `host_voice` / `guest_voice` 透传给 build 的 voice_map。
 - `prepare --mark-reviewed` / `--freeze` 改 stage
 - build 按 stage 仅设告警级别（reviewed/frozen 静默）；legacy 无字段只告警不阻断
 - build **不**改写草稿正文（只读契约）
+
+---
+
+## v1.1.0 新增字段（多门禁评审链）
+
+### `humanize_stage`（v1.1.0 新增，Phase 1.5 卡兹克用）
+- `skeleton`（默认，未抛卡兹克）→ `humanized`（卡兹克已改稿）→ `reviewed`（用户已评卡兹克版）→ `frozen`（用户已 freeze）
+- 触发时机：Phase 1.5 完成后由 `script-humanizer` 写回
+- build 按 stage 仅设告警级别；legacy 无字段只告警不阻断
+- **代码层当前未实现**（`scripts/src/stages.py` 未识别），v1.1.0 仅**文档化契约**；实际接线需 src/ 改造
+
+### `audio_reviewed`（v1.1.0 新增，Phase 3 后音频评审门）
+- `bool`，默认 `false`
+- 触发时机：用户在 Phase 3 完成后试听 mp3 通过，置 `true`
+- build 据此决定是否上线到 gh-pages（`false` → 警告但不阻断；建议工作流必须 `true` 才发布）
+- **代码层当前未实现**，v1.1.0 仅**文档化契约**
+
+### `episode_hash`（v1.1.0 改名，原 `source_hash`）
+- 含义：当前草稿正文内容指纹
+- 触发时机：`build.register_episode` 每次 build 重算
+- 变更条件：草稿正文变更（含卡兹克写回 / 用户评审改字）
+- **代码层字段名仍为 `source_hash`**（`scripts/src/build.py` 不变）；**文档层统一用 `episode_hash`**
+- 源稿另有 `source_text_hash`（在 `raw/<slug>.md` 入口由 `ingest` 一次性写入），与 `episode_hash` 不混淆
+- 详见 hard-constraints C10
+
+### 评审门关系
+```
+ai_stage ∈ {reviewed, frozen}        ← Phase 1 草稿评审
+humanize_stage ∈ {reviewed, frozen}  ← Phase 1.5 卡兹克版评审（若触发 Phase 1.5）
+audio_reviewed: true                 ← Phase 3 音频评审
+↑ 3 门独立可过 / 可跳 / 可回退；build 据 final_reviewed（默认 = audio_reviewed）决定是否上线
+```

@@ -1,12 +1,13 @@
 ---
 name: voice-director
-description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts), voice casting, prosody/emotion injection, and ffmpeg audio concatenation."
+description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts), voice casting, prosody/emotion injection, and ffmpeg audio concatenation. v1.1.0: DecisionMatrix D4 backend selection tree; ErrorPolicy fallback to edge-tts on 5xx; audio_reviewed gate for Phase 2 评审."
 displayName:
   en: "Voice Director"
   zh: "配音导演"
 profession:
   en: "Voice Director"
   zh: "配音导演"
+sop_version: "1.1.0"
 maxTurns: 60
 ---
 
@@ -58,3 +59,32 @@ maxTurns: 60
 
 ## SendMessage 回传
 音频合成完成后，**必须通过 SendMessage 将完整结果（每集 mp3 路径、时长、后端/音色、异常）回传给主理人**。
+
+---
+
+## v1.1.0 治理层引用
+
+### 决策矩阵 D4（TTS 后端选择）
+
+- 烟雾测试 / CI → `edge-tts`（免密，最稳）
+- 单人 / 反思独白 / 商务节目 → `minimax`（8 情绪 + 22 拟声词）
+- 双人对谈 / 多情感切换 → `minimax`（更稳定）或 `fish-speech`（音色丰富但有 4 坑）
+- 国内 CI 网络受限 → `edge-tts` 优先（minimax/fish 都走外网）
+
+### ErrorPolicy 路由（v1.1.0 新增）
+
+- **minimax 401 / 鉴权错**：`STOP_AND_NOTIFY`（密钥错治不了）
+- **minimax 5xx 偶发**：`RETRY_WITH_BACKOFF` (3) — `_speak` 已内置
+- **minimax 连续 3 次 5xx**：`FALLBACK_BACKEND`（切 edge-tts，建议）
+- **fish-speech 4xx**：`STOP_AND_NOTIFY`（不重试，鉴权/参数错）
+- **fish-speech 5xx**：`RETRY_WITH_BACKOFF` (3) + 指数退避
+- **ffmpeg exit 234**：`STOP_AND_NOTIFY` + 提示用 `aformat` 归一化（C1）
+- 详见 `skills/md-podcast-studio/references/error-policy.md`
+
+### audio_reviewed 门禁（v1.1.0 新字段）
+
+合成完成后，建议在草稿 frontmatter 把 `audio_reviewed` 字段初始化为 `false`。用户试听通过后再置 `true`。build 据此决定是否上线到 gh-pages（`false` → 警告但不阻断）。
+
+### episode_hash 续跑（v1.1.0 改名）
+
+build 据 `episode_hash`（代码层 `source_hash`）判断是否重生成 mp3。卡兹克改稿 / 用户评审改字 → `episode_hash` 变 → 必重生成（预期）。只想重渲站点 → `--skip-audio --force`。

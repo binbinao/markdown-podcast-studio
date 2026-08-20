@@ -10,4 +10,5 @@ Thumbs.db
 # WorkBuddy runtime
 .workbuddy-tmp/
 
-# 保留: 物理归档目录不进 git (那是冗余备份)
+# 物理归档目录（冗余备份，独立于 git tag）。见 .archive/README.md
+.archive/
