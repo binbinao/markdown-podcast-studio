@@ -85,13 +85,12 @@ duo 另需 `host_voice` / `guest_voice` 透传给 build 的 voice_map。
 - build 据此决定是否上线到 gh-pages（`false` → 警告但不阻断；建议工作流必须 `true` 才发布）
 - **代码层当前未实现**，v1.1.0 仅**文档化契约**
 
-### `episode_hash`（v1.1.0 改名，原 `source_hash`）
-- 含义：当前草稿正文内容指纹
+### `source_hash`（v1.1.0 / v1.1.1 字段定义）
+- 含义：**源稿**（`raw/<slug>.md`）的 SHA256 前 16 位内容指纹（`feed.py` 第 181 行 `_hash_source(source_rel)`）
 - 触发时机：`build.register_episode` 每次 build 重算
-- 变更条件：草稿正文变更（含卡兹克写回 / 用户评审改字）
-- **代码层字段名仍为 `source_hash`**（`scripts/src/build.py` 不变）；**文档层统一用 `episode_hash`**
-- 源稿另有 `source_text_hash`（在 `raw/<slug>.md` 入口由 `ingest` 一次性写入），与 `episode_hash` 不混淆
-- 详见 hard-constraints C10
+- 变更条件：**源稿变更时变**（raw 改了）
+- 关键澄清（v1.1.1）：卡兹克改草稿正文**不会**改变 `source_hash`（raw 没动），所以 build 会**跳过重生成**（续跑命中）。想强制重生成用 `--force`。
+- v1.1.0 曾误诊为本字段是"草稿正文指纹"并改名 `episode_hash`，v1.1.1 已全部撤销（hard-constraints C10 已删除）
 
 ### 评审门关系
 ```

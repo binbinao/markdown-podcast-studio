@@ -28,7 +28,7 @@ Team 型（多角色协作团队，5 人）
 3. **RACI 矩阵** — 7 阶段 × 4 角色，明确 A 与 R 边界
 4. **ErrorPolicy（4 类策略）** — `STOP_AND_NOTIFY` / `RETRY_WITH_BACKOFF` / `FALLBACK_BACKEND` / `DEGRADE`
 5. **多门禁字段** — 新增 `humanize_stage`（Phase 1.5 评审）+ `audio_reviewed`（Phase 3 音频评审）
-6. **episode_hash 改名** — `source_hash` → `episode_hash`（代码层字段名保留作为别名，向后兼容）
+6. ~~**episode_hash 改名**（v1.1.0，已被 v1.1.1 撤销——真相是 source_hash 本来就是源稿指纹）~~
 7. **并行评审配置** — `parallel_review: bool`（Phase 1.5 与 Phase 2 评审门可并行）
 8. **Metrics + PII 文档化建议** — 每阶段指标 + 草稿出口 PII 扫描（当前文档化，src/ 改造作为 v1.2.0 候选）
 

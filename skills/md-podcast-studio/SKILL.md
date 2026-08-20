@@ -6,7 +6,7 @@ owner: script-editor                       # SOP 修改权限归属（PR 评审�
 effective_from: 2026-08-20
 changelog_ref: ../../../CHANGELOG.md      # 变更日志相对路径
 supersedes: v1.0.0
-description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, optionally humanize via Khazix (Phase 1.5), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.1.0 adds SOP metadata, DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), and renames source_hash → episode_hash (code alias preserved)."
+description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, optionally humanize via Khazix (Phase 1.5), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.1.1 adds SOP metadata, DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), and clarifies that source_hash is the raw article fingerprint (v1.1.0 episode_hash rename revoked)."
 ---
 
 # Markdown Podcast Studio — Skill (v1.1.0)
@@ -29,8 +29,8 @@ description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh proj
 - `bin/scaffold` — 在新目录实例化整套工程
 - `references/`
   - `command-reference.md` — 精确 CLI 调用（prepare / build / 全序列）
-  - `config-spec.md` — `config.yaml` 字段规范（含 v1.1.0 新增 `humanize_stage` / `audio_reviewed` / `episode_hash`）
-  - `hard-constraints.md` — 10 条硬约束（团队必守，**C10 = episode_hash 命名约定**）
+  - `config-spec.md` — `config.yaml` 字段规范（含 v1.1.0 新增 `humanize_stage` / `audio_reviewed`；v1.1.1 撤销 v1.1.0 误诊的 `episode_hash` 字段定义）
+  - `hard-constraints.md` — **v1.1.1 删除 v1.1.0 误诊的 C10**，回到 9 条硬约束（团队必守）
   - `troubleshooting.md` — 已知坑与排错
   - `error-policy.md` — **v1.1.0 新增**：4 类错误策略与每阶段应用示例
   - `metrics.md` — **v1.1.0 新增**：每阶段采集指标建议（文档化，实际采集需 src/ 改造）

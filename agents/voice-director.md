@@ -1,6 +1,6 @@
 ---
 name: voice-director
-description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts), voice casting, prosody/emotion injection, and ffmpeg audio concatenation. v1.1.0: DecisionMatrix D4 backend selection tree; ErrorPolicy fallback to edge-tts on 5xx; audio_reviewed gate for Phase 2 评审."
+description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts), voice casting, prosody/emotion injection, and ffmpeg audio concatenation. v1.1.1: DecisionMatrix D4 backend selection tree; ErrorPolicy fallback to edge-tts on 5xx; audio_reviewed gate for Phase 2 评审; source_hash续跑真相 (raw 源稿 SHA256 前 16 位)."
 displayName:
   en: "Voice Director"
   zh: "配音导演"
@@ -85,6 +85,15 @@ maxTurns: 60
 
 合成完成后，建议在草稿 frontmatter 把 `audio_reviewed` 字段初始化为 `false`。用户试听通过后再置 `true`。build 据此决定是否上线到 gh-pages（`false` → 警告但不阻断）。
 
-### episode_hash 续跑（v1.1.0 改名）
+### source_hash 续跑（v1.1.1 真相）
 
-build 据 `episode_hash`（代码层 `source_hash`）判断是否重生成 mp3。卡兹克改稿 / 用户评审改字 → `episode_hash` 变 → 必重生成（预期）。只想重渲站点 → `--skip-audio --force`。
+build 据 `source_hash`（源稿 `raw/<slug>.md` 的 SHA256 前 16 位）判断是否重生成 mp3。
+
+- **raw 源稿没变 → 跳过重生成**（续跑命中，正常）
+- **raw 源稿变了 → 警告"raw 文章已变更但音频未更新"**，build 跑 TTS 重生成
+- **卡兹克改草稿正文 / 用户评审改字 → source_hash 不变**（因为 raw 没动）→ build 跳过重生成。**这是正确行为，不是 bug**
+
+想"草稿改后强制重生成"→ 用 `--only ep-XX --force`（单集）或 `--force`（全部）。
+只想重渲站点不动音频 → `--skip-audio --force`。
+
+**v1.1.0 误诊**：把 `source_hash` 改名为 `episode_hash`（声称是"草稿正文指纹"），新增 C10。**v1.1.1 已全部撤销**。

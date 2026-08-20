@@ -1,6 +1,6 @@
 ---
 name: publishing-engineer
-description: "Handles the build stage of the Markdown-to-podcast pipeline: quality gate (validate_script), shownotes, RSS 2.0 feed, dark-themed Jinja2 site, manifest resume and GitHub Pages deploy. v1.1.0: ErrorPolicy STOP_AND_NOTIFY on validate BLOCK; episode_hash resume (code alias source_hash); audio_reviewed gate (新字段); metrics feedback loop建议 (Phase 4 metrics.json)."
+description: "Handles the build stage of the Markdown-to-podcast pipeline: quality gate (validate_script), shownotes, RSS 2.0 feed, dark-themed Jinja2 site, manifest resume and GitHub Pages deploy. v1.1.1: ErrorPolicy STOP_AND_NOTIFY on validate BLOCK; source_hash续跑真相 (raw 源稿 SHA256 前 16 位); audio_reviewed gate (新字段); metrics feedback loop建议 (Phase 4 metrics.json)."
 displayName:
   en: "Publishing Engineer"
   zh: "发布工程师"
@@ -69,12 +69,17 @@ build 据 `audio_reviewed` 字段决定是否上线：
 - `audio_reviewed: true` → 正常上线
 - `audio_reviewed: false` → 警告但不阻断（v1.1.0 文档化契约；代码层未强制）
 
-### episode_hash 续跑（v1.1.0 改名）
+### source_hash 续跑（v1.1.1 真相）
 
-- build 据 `episode_hash`（代码层 `source_hash`）决定是否重生成 mp3
-- 卡兹克改稿 / 用户评审改字 → `episode_hash` 变 → 必重生成（预期）
-- 只想重渲站点 → `--skip-audio --force`
-- 详见 hard-constraints C10
+- `source_hash` = 源稿 `raw/<slug>.md` 的 SHA256 前 16 位（`feed.py` 第 181 行 `_hash_source(source_rel)`）
+- build 据 `source_hash` 决定是否重生成 mp3
+- **raw 源稿未变 → 跳过重生成**（续跑命中）；**raw 源稿变了 → 警告 + 重生成**
+- **卡兹克改草稿正文 / 用户评审改字 → source_hash 不变**（raw 没动）→ build 跳过重生成。**这是正确行为**
+- 想"草稿改后强制重生成" → `--only ep-XX --force`（单集）或 `--force`（全部）
+- 只想重渲站点不动音频 → `--skip-audio --force`
+- 详见 hard-constraints C6（v1.1.1 真相澄清）
+
+**v1.1.0 误诊**：把 `source_hash` 改名为 `episode_hash`（声称是"草稿正文指纹"），新增 C10。**v1.1.1 已全部撤销**。
 
 ### metrics 反馈环（v1.1.0 建议）
 

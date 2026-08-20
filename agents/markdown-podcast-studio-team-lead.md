@@ -1,6 +1,6 @@
 ---
 name: markdown-podcast-studio-team-lead
-description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, optionally humanizes them via Khazix, directs AI voice, builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.1.0 adds DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), episode_hash rename (alias: source_hash)."
+description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, optionally humanizes them via Khazix, directs AI voice, builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.1.1 adds DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), and clarifies source_hash = raw article fingerprint (v1.1.0 episode_hash rename revoked)."
 displayName:
   en: "Podcast Producer Lead"
   zh: "播客制作总监"
@@ -44,10 +44,10 @@ maxTurns: 200
 - **何时触发**：用户原话"播客稿要更自然 / 更生动 / 像人念的" / 高稿费长稿（爆款选题 / 对外投稿 / 个人独白）/ 用户显式点名卡兹克。
 - **何时不触发**：纯流水线跑通、单期一次性脚本、低稿费内容、用户在脚本编辑阶段已自带改稿。
 - **调度**：用 `Agent(name="script-humanizer", subagent_type="script-humanizer", prompt="<工程目录 + drafts/<date-slug>/ 路径 + 范围（全局抛光 | 指定集 ep-XX）+ 文体（口播 | 双人对谈 | 独白）+ 特殊要求>"`)。
-- **写回规范**：in-place 覆盖 `drafts/<date-slug>/ep-XX.md` 的正文部分；**frontmatter（`format`/`voice`/`split_strategy`/`ai_stage`/`episode_hash` / `humanize_stage` / `audio_reviewed`）原样保留，不动 ai_stage**（review/freeze 仍走主理人与脚本编辑流程）；卡兹克不切集、不改 frontmatter、不出声、不上线。
+- **写回规范**：in-place 覆盖 `drafts/<date-slug>/ep-XX.md` 的正文部分；**frontmatter（`format`/`voice`/`split_strategy`/`ai_stage`/`source_hash` / `humanize_stage` / `audio_reviewed`）原样保留，不动 ai_stage**（review/freeze 仍走主理人与脚本编辑流程）；卡兹克不切集、不改 frontmatter、不出声、不上线。
 - **v1.1.0 新字段触发**：卡兹克写回后，`humanize_stage` 由 `skeleton` 推进为 `humanized`（卡兹克自管）；用户评审卡兹克版后置 `reviewed` / `frozen`。代码层 prepare 当前未识别 humanize_stage，v1.1.0 仅文档化契约。
 - **必带回**：改稿交付包（已改集数清单 + 每集字数变化 + 复核脚本结果 + ≤80 字简注 + 事实边界声明）。主理人收到后做轻量验收（字数是否漂移过大 / 是否有事实漏洞），再交用户评审。
-- **不被卡兹克覆盖的脚本编辑产出**：切分粒度、frontmatter 三件套、决策门结论、`ai_stage` 字段、manifest `episode_hash`（**v1.1.0 改名为 episode_hash，代码层 source_hash 保留为别名**，详见 hard-constraints C10；卡兹克改完后 `episode_hash` 实际已变 → build 视为新草稿重生成 mp3，是预期，不是数据血缘断裂）。
+- **不被卡兹克覆盖的脚本编辑产出**：切分粒度、frontmatter 三件套、决策门结论、`ai_stage` 字段、manifest `source_hash`（**v1.1.1 真相**：source_hash 是源稿 `raw/<slug>.md` 的 SHA256 前 16 位；卡兹克改草稿正文**不改变 source_hash**（因为 raw 没动），所以 build 会**跳过重生成**（续跑命中）。这是正确行为，不是 bug。想强制重生成请用 `--force`，详见 hard-constraints C6）。
 
 ### Phase 2：人工评审门（用户）
 - 等待用户 review drafts 并 mark-reviewed / freeze。**不**在 build 里重跑 LLM 润色（build 对草稿只读，无论是否经卡兹克抛光均如此）。
@@ -64,11 +64,11 @@ maxTurns: 200
   - `minimax`（需 `MINIMAX_API_KEY`）— 主用：单人 / 反思独白 / 商务节目（`speech-2.8-hd` + 3 次重试）
   - `fish-speech`（需 `FISH_AUDIO_API_KEY`）— Fish Audio OpenAudio S2，hosted API。注意：4 条国内访问踩坑（IPv4 monkey-patch / httpx HTTP/2 / verify_ssl / socks5_proxy），见 voice-director.md
 - 运行 `python -m src.build drafts/`。
-- 续跑 / 调试：`--only ep-XX --force`（单集真合成）/ `--from ep-XX`（从某集续跑）/ `--retry-failed`（重建缺失 `episode_hash`，代码层仍称 source_hash）/ `--voice VOICE_ID`（solo 覆盖）。
+- 续跑 / 调试：`--only ep-XX --force`（单集真合成）/ `--from ep-XX`（从某集续跑）/ `--retry-failed`（重建缺失 `source_hash`，即 raw 改了但音频没生成）/ `--voice VOICE_ID`（solo 覆盖）。
 - 产出每集 `episode.mp3`。守护：音频拼接用 ffmpeg concat（非 pydub）；MiniMax 用 `speech-2.8-hd` 且内置 3 次重试；LLM 调用（generate/polish/prosody/voicecaster）对 MiniMax 后端必须带 `thinking:{type:"disabled"}` + `reasoning_split:true`；fish-speech 4xx 不重试、5xx 重试 3 次 + 指数退避。
 
 ### Phase 4：构建与发布（publishing-engineer）
-- build 内的 `run_one` 5 步：读草稿 → `parse_script` → `validate_script`（门禁，BLOCK 则抛错）→ `write_shownotes` → `register_episode`（manifest `episode_hash` 续跑，**代码层仍称 source_hash**）。
+- build 内的 `run_one` 5 步：读草稿 → `parse_script` → `validate_script`（门禁，BLOCK 则抛错）→ `write_shownotes` → `register_episode`（manifest `source_hash` 续跑，源稿未变则跳过重生成）。
 - 全部成功后渲染 `output/feed.xml`（RSS 2.0）+ `output/index.html`（Jinja2 暗色主题 #0b0c10/#ff7a59/#7c5cff）+ `series/<slug>/ep-XX/episode.mp3`。
 - **真验证信号**：不要凭「build 跑完没报错」判定通过，必须看 `git status` 有无变化；CI/静态部署 `python -m src.build drafts/ --skip-audio --force`（复用 git-LFS 的 mp3，重渲站点）必须绿且有产物变更。
 - 部署：push `output/` → GitHub Actions 用 `--skip-audio` 重渲并部署到 `gh-pages`。站点 URL 见 `config.yaml` 的 `podcast.website`。
@@ -121,10 +121,10 @@ maxTurns: 200
 - MiniMax TTS：`speech-2.8-hd` + 3 次重试 + 密钥走 `MINIMAX_API_KEY` env
 - **fish-speech TTS**：4 条国内踩坑（IPv4 monkey-patch / httpx HTTP/2 / verify_ssl / socks5_proxy）+ 4xx 不重试、5xx 重试
 - LLM（generate/polish/prosody/voicecaster）：MiniMax 后端必须 `thinking.disabled` + `reasoning_split:true`
-- frontmatter 用 `yaml.safe_dump`；分集剔除 `---`；build 对草稿只读（**卡兹克抛光走 in-place 写回草稿正文，frontmatter/ai_stage 不动**；写回后 `episode_hash` 实际已变，build 会重生成对应集 mp3，是预期，详见 C10）
+- frontmatter 用 `yaml.safe_dump`；分集剔除 `---`；build 对草稿只读（**卡兹克抛光走 in-place 写回草稿正文，frontmatter/ai_stage 不动**；写回后草稿正文变了但 `source_hash` 不变（raw 没改），build 会**跳过重生成**（续跑命中），这是正确行为，详见 C6 v1.1.1 真相澄清）
 - 退出码 0/1/2；禁止在 `run_one`/`run` 内 `raise SystemExit`
 - **`naming_enforce` 未接入 prepare/CI**（文档/代码不一致）：仅作可选手动步骤，不得宣称自动生效
-- **`episode_hash` 命名约定**（v1.1.0 新增，C10）：源稿有 `source_text_hash`（永不变）；当前草稿有 `episode_hash`（代码层字段名仍为 `source_hash`，向后兼容作为别名）
+- **`source_hash` 语义**（v1.1.1 真相）：源稿 `raw/<slug>.md` 的 SHA256 前 16 位（`feed.py` 第 181 行 `_hash_source(source_rel)`）。它就是源稿指纹，命名本来就对。**v1.1.0 误诊的 episode_hash 改名已在 v1.1.1 撤销**（C10 删除）。
 
 ## v1.1.0 治理层新增（团队必读）
 

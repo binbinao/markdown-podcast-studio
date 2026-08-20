@@ -4,7 +4,37 @@
 
 ---
 
-## [1.1.0] — 2026-08-20 — 流程管控专家评审应用
+## [1.1.1] — 2026-08-20 — R1 数据血缘真相澄清（hotfix）
+
+> **变更驱动**：审阅 `scripts/src/feed.py` 第 181 行 `_hash_source(source_rel)` 后发现 v1.1.0 的 R1 应用有误诊断。
+> **变更范围**：纯**文档层修复**（agents/ + skills/*.md + README + plugin.json + CHANGELOG）。**不动 scripts/src/**（确认 source_hash 字段就是源稿指纹，命名正确）。
+> **回滚**：`git checkout v1.1.0 -- .` 或 `rsync -a --delete .archive/v1.0.0/ ./`（物理归档仍是 v1.0.0 baseline；如需 v1.1.0 → v1.1.1 直接 `git checkout v1.1.0`）。
+
+### 真相
+
+| 字段 | v1.1.0 错诊断 | v1.1.1 真相 |
+|---|---|---|
+| `source_hash` | "当前草稿正文指纹，v1.1.0 改名为 episode_hash" | **源稿（`raw/<slug>.md`）的 SHA256 前 16 位**，命名本来就对 |
+| 卡兹克改稿后 | "episode_hash 变 → build 重生成 mp3（预期）" | **source_hash 不变**（raw 没改）→ **build 跳过重生成**（续跑命中）。这是正确行为 |
+| 想"草稿改后重生成" | "episode_hash 变自动触发" | 用 `--force`（现状行为） |
+
+### Changed
+
+- **撤销 R1 改名**：恢复 `source_hash` 原名，删除"episode_hash"全部文档层引用
+- **hard-constraints C6 真相澄清**（v1.1.1 新增）：明示"source_hash 是源稿指纹；卡兹克改稿不触发重生成（除非 raw 改）；想强制重生成用 `--force`"
+- **删除 hard-constraints C10**（v1.1.0 误诊的"episode_hash 命名约定"整段）
+- **config-spec.md** 删除"episode_hash"字段定义（恢复 v1.0.0 之前的 source_hash 单字段语义）
+- **5 个 agent MD** 全部对齐：删除 episode_hash 引用、修正"卡兹克改稿触发重生成"错描述为正确行为
+- **README.md / plugin.json / SKILL.md** description 同步删除 episode_hash 表述
+
+### Not Changed
+
+- `skills/md-podcast-studio/scripts/src/**` — 冻结资产（v1.1.1 确认 source_hash 字段就是源稿指纹，命名本来就对，无需改代码）
+- v1.1.1 不引入 `episode_hash` 草稿指纹字段；如未来需要"草稿改触发重生成"机制，作为 v1.2.0 候选（需 src/ 改造）
+
+---
+
+## [1.1.0] — 2026-08-20 — 流程管控专家评审应用（**已被 v1.1.1 修订**，R1 改名撤销）
 
 > **变更驱动**：上一轮"流程管控专家（30+ 年经验）"诊断报告应用。
 > **变更范围**：纯**专家团治理层**（agents/ + skills/*.md + README + plugin.json）。**不动 `skills/md-podcast-studio/scripts/src/`**（冻结资产）。
@@ -21,21 +51,22 @@
 - **2 张流程图**：在 `SKILL.md` 加主流程图（happy path，Phase 0→1→2→3→4→5，6 节点）+ 异常流图（retry / fallback / skip / fallback backend）。→ **G1**
 - **多门禁字段定义（humanize_stage / audio_reviewed）**：在 `config-spec.md` 文档化 2 个新字段（`humanize_stage`：`skeleton/humanized/reviewed/frozen`；`audio_reviewed`：`bool`）。代码层 `prepare --mark-reviewed` 不强制实现，向后兼容。→ **R2 简化**
 - **并行评审配置项**：在 `SKILL.md` 加 `parallel_review: bool` 配置项说明：理论上 Phase 1.5 与 Phase 2 评审门可并行。文档化建议。→ **G4**
-- **版本元数据（plugin.json）**：`.codebuddy-plugin/plugin.json` 加 `version: "1.1.0"` 字段；`description` / `displayDescription` 更新以反映 v1.1.0 关键能力（多门禁 + 决策矩阵 + RACI + episode_hash）。
+- **版本元数据（plugin.json）**：`.codebuddy-plugin/plugin.json` 加 `version: "1.1.0"` 字段；`description` / `displayDescription` 更新以反映 v1.1.0 关键能力（多门禁 + 决策矩阵 + RACI + 真相澄清后的源稿指纹语义）。v1.1.1 同步更新。
 - **本 CHANGELOG.md**。
 - **`.archive/` 目录 + `.archive/README.md`**：物理冗余备份指南，v1.0.0 baseline 已 snapshot。
 
 ### Changed（变更）
 
-- **`source_hash` → `episode_hash` 改名（文档层）**：在 `references/hard-constraints.md` C6 与 `references/config-spec.md` 把 `source_hash` 改名为 `episode_hash`（更准确反映"它是当前集内容指纹，非源稿哈希"）。代码层 `source_hash` 字段保留作为别名，向后兼容不破坏现有 `prepare/build`。→ **R1**
-- **hard-constraints C6 澄清**：明确"卡兹克抛光后 episode_hash 实际已变，build 视为新草稿重生成 mp3，是预期（不是数据血缘断裂）"。→ **R1**
-- **`hard-constraints.md` 新增 C10 — episode_hash 命名约定**：见 C6 改名说明，源稿哈希另有 `source_text_hash`。
-- **agents/*.md 同步 v1.1.0**：5 个 agent MD 文件（team-lead / script-editor / script-humanizer / voice-director / publishing-engineer）全部对齐 v1.1.0 关键变更（episode_hash 改名、humanize_stage 新字段、决策矩阵、RACI）。不动每个角色的核心职责边界。
-- **`README.md`**：加版本号、CHANGELOG 摘要、回滚说明、关键能力 v1.1.0 摘要。
+- **R1 数据血缘修正（实际为 R1 文档化澄清，非改名）**：实际审阅 `scripts/src/feed.py` 第 181 行 `_hash_source(source_rel)` 后确认：`source_hash` 字段的计算**就是源稿（`raw/<slug>.md`）的 SHA256 前 16 位**——它名副其实就是"源稿指纹"。原 v1.1.0 把它改名为"episode_hash"（声称是"当前草稿正文指纹"）是误诊断；v1.1.1 撤销该改名，恢复 `source_hash` 原名。`hard-constraints.md` C6 增加 v1.1.1 真相澄清：C10 整段删除（不再需要"episode_hash 命名约定"，因为源稿指纹就是源稿指纹）。所有 agent MD 与 plugin.json / README / SKILL.md 同步。**关键修正**：卡兹克改稿**不会**触发 mp3 重生成（因为 source_hash 是源稿指纹，草稿改 ≠ 源稿改）；想"草稿改后强制重生成"请用 `--force`。
+- **hard-constraints C6 真相澄清（v1.1.1）**：`source_hash` 是源稿指纹。**卡兹克抛光后草稿正文变了，但 source_hash 不变（因为 raw 没改）→ build 跳过重生成（续跑命中）**。这是 build 的正确行为，不是 bug。要主动重生成请用 `--force` 或 `--only ep-XX --force`。→ **R1**
+- **hard-constraints.md 删除 v1.1.0 新增的 C10**：v1.1.0 误诊的"episode_hash 命名约定"不再适用。源稿指纹就是源稿指纹，命名清晰。v1.2.0 候选：若想让"草稿正文变化也触发重生成"，需新增 `episode_hash` 字段（草稿 SHA256）+ build 双重比对。**当前不做**（scripts/src/ 冻结资产）。
+- **agents/*.md 同步 v1.1.1**：5 个 agent MD 文件（team-lead / script-editor / script-humanizer / voice-director / publishing-engineer）全部对齐 v1.1.1 R1 真相澄清（恢复 source_hash 原名、删除 episode_hash 引用、修正"卡兹克改稿触发重生成"错描述）。
+- **`README.md` v1.1.1 修正**：删除"episode_hash 改名"项，恢复 v1.1.0 之前状态（source_hash 原名，源稿指纹语义）。
+- **`.codebuddy-plugin/plugin.json` v1.1.1 修正**：`description` / `displayDescription` 同步更新（删除 episode_hash 改名表述）。
 
 ### Not Changed（未改，受范围限制）
 
-- `skills/md-podcast-studio/scripts/src/**` — **冻结资产**（"代码是冻结资产，包装期不修改逻辑"）。若要落实 episode_hash 改名 / humanize_stage 字段 / metrics 采集，需 myPodcast 仓库演进后重新打包。
+- `skills/md-podcast-studio/scripts/src/**` — **冻结资产**（"代码是冻结资产，包装期不修改逻辑"）。v1.1.1 不动代码逻辑；R1 真相澄清纯文档层修复。
 - `skills/md-podcast-studio/bin/scaffold` — 冻结资产。
 - `skills/md-podcast-studio/templates/**` — 冻结资产。
 

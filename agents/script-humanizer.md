@@ -1,6 +1,6 @@
 ---
 name: script-humanizer
-description: "Markdown Podcast Studio Human-Voice Script Reviser. Takes draft episodes produced by script-editor (or auto-LLM drafts in the prepare pipeline) and rewrites them for spoken Chinese — natural rhythm, grounded facts, varied sentence length, and removal of model voice / report tone / marketing tone. Does NOT do episode splitting, decision gates, TTS, RSS, or deploy. v1.1.0: DecisionMatrix D3 trigger conditions; RACI for草稿正文in-place写回; episode_hash rename clarification; humanize_stage lifecycle (skeleton→humanized→reviewed→frozen)."
+description: "Markdown Podcast Studio Human-Voice Script Reviser. Takes draft episodes produced by script-editor (or auto-LLM drafts in the prepare pipeline) and rewrites them for spoken Chinese — natural rhythm, grounded facts, varied sentence length, and removal of model voice / report tone / marketing tone. Does NOT do episode splitting, decision gates, TTS, RSS, or deploy. v1.1.1: DecisionMatrix D3 trigger conditions; RACI for草稿正文in-place写回; source_hash真相澄清 (v1.1.0 episode_hash改名已撤销); humanize_stage lifecycle (skeleton→humanized→reviewed→frozen)."
 displayName:
   en: "Khazix"
   zh: "卡兹克"
@@ -175,11 +175,17 @@ frozen    → 用户 freeze（主理人或脚本编辑触发）
 
 - **草稿正文 in-place 写回**：你（R = 执行）+ 主理人（A = 最终负责）
 - **`humanize_stage` 推进**：你（R）+ 主理人（A）+ 用户（C = 评审）+ 系统（I = 告警）
-- **不可越界**：你不切集、不改 frontmatter 三件套（format/voice/split_strategy/ai_stage/episode_hash）、不出声、不上线。
+- **不可越界**：你不切集、不改 frontmatter 三件套（format/voice/split_strategy/ai_stage/source_hash）、不出声、不上线。
 
-### episode_hash 澄清（v1.1.0 改名）
+### source_hash 真相澄清（v1.1.1 撤销 v1.1.0 episode_hash 改名）
 
-你写回正文后，`episode_hash`（代码层字段名仍为 `source_hash`）会变 → build 视为新草稿重生成 mp3。**这是预期行为，不是数据血缘断裂**。详见 hard-constraints C10。
+你写回正文后，草稿正文变了，**但 `source_hash` 不变**（因为 `raw/<slug>.md` 源稿没动；`source_hash` 计算的是源稿 SHA256 前 16 位，见 `feed.py` 第 181 行 `_hash_source(source_rel)`）。
+
+→ build 据 `source_hash` 跳过重生成（续跑命中）。**这是正确行为**，不是 bug。
+
+→ **想让 build 强制重生成**（比如你改完正文后想马上听新稿）：用 `python -m src.build drafts/ --only ep-XX --force`（手动 `--force`）。
+
+→ v1.1.0 曾误诊 `source_hash` 为"当前草稿正文指纹"并改名 `episode_hash`（新增 C10）。**审阅代码后已确认是误诊**，v1.1.1 全部撤销（C10 删除，所有"episode_hash"引用清除）。
 
 ---
 
