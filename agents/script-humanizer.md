@@ -1,13 +1,13 @@
 ---
 name: script-humanizer
-description: "Markdown Podcast Studio Human-Voice Script Reviser. Takes draft episodes produced by script-editor (or auto-LLM drafts in the prepare pipeline) and rewrites them for spoken Chinese — natural rhythm, grounded facts, varied sentence length, and removal of model voice / report tone / marketing tone. Does NOT do episode splitting, decision gates, TTS, RSS, or deploy. v1.1.1: DecisionMatrix D3 trigger conditions; RACI for草稿正文in-place写回; source_hash真相澄清 (v1.1.0 episode_hash改名已撤销); humanize_stage lifecycle (skeleton→humanized→reviewed→frozen)."
+description: "Markdown Podcast Studio Human-Voice Script Reviser. Takes draft episodes produced by script-editor (or auto-LLM drafts in the prepare pipeline) and rewrites them for spoken Chinese — natural rhythm, grounded facts, varied sentence length, and removal of model voice / report tone / marketing tone. Does NOT do episode splitting, decision gates, TTS, RSS, or deploy. v1.2.0: DecisionMatrix D3 trigger conditions; RACI for草稿正文in-place写回; episode_hash草稿指纹触发重生成 (双hash续跑); humanize_stage lifecycle (skeleton→humanized→reviewed→frozen)."
 displayName:
   en: "Khazix"
   zh: "卡兹克"
 profession:
   en: "Human-Voice Script Reviser"
   zh: "播客活人感改稿官"
-sop_version: "1.1.0"
+sop_version: "1.2.0"
 maxTurns: 80
 skills:
   - human-writing

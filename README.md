@@ -1,8 +1,8 @@
 # Markdown Podcast Studio
 
-把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 →（可选卡兹克活人感抛光）→ AI 配音（MiniMax / edge-tts / fish-speech 三后端）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
+把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 →（可选卡兹克活人感抛光）→ AI 配音（MiniMax / edge-tts / fish-speech 三后端，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
 
-> **当前版本：v1.1.0**（2026-08-20）— 流程管控专家评审应用。
+> **当前版本：v1.2.0**（2026-08-20）— src/ 实际改造：episode_hash 草稿指纹 + metrics 5 阶段采集 + PII 扫描接入 + ErrorPolicy 自动 fallback。
 > 详见 [CHANGELOG.md](./CHANGELOG.md)。回滚方式见文末。
 
 ## 类型
@@ -34,14 +34,22 @@ Team 型（多角色协作团队，5 人）
 
 完整变更清单与变更原因见 [CHANGELOG.md](./CHANGELOG.md)。
 
-## v1.1.0 未改（受范围限制）
+## v1.2.0 关键能力（增量）
 
-`skills/md-podcast-studio/scripts/src/**` 与 `bin/scaffold` 是**冻结资产**，v1.1.0 不动业务代码。下列能力需 src/ 改造，作为 v1.2.0 候选：
+相比 v1.1.1，v1.2.0 把"建议"变成"实现"，**4 项 src/ 实际改造**：
 
-- metrics 实际采集（需 `scripts/src/metrics.py` 新文件）
-- PII 扫描实际接入 prepare 出口（需 `scripts/src/pii_scan.py` 新文件）
-- ErrorPolicy 自动 fallback 实际接入（需 `scripts/src/backends/` 改造）
-- `humanize_stage` / `audio_reviewed` 在 prepare/build 中识别（需 `scripts/src/stages.py` + `scripts/src/build.py` 改造）
+1. **真 episode_hash（草稿指纹）** — 新增 `scripts/src/episode_hash.py`；`feed.register_episode(..., body=body_text)` 写 manifest；`build.run()` 续跑升级为**双 hash 比对**（source_hash + episode_hash，任一变了就重生成）
+2. **metrics 实际采集** — 新增 `scripts/src/metrics.py`；`prepare_file()` / `mark_reviewed()` / `run_one()` 三个出口自动 emit，写到 `output/metrics/<date>/phase*.json`
+3. **PII 扫描接入 prepare** — 新增 `scripts/src/pii_scan.py`；草稿落盘前自动脱敏（电话/邮箱/身份证/银行卡/IP）；报告写到 `drafts/<series>/.pii/ep-XX.json`
+4. **ErrorPolicy 自动 fallback** — 新增 `scripts/src/error_policy.py`；`tts.build_episode_with_fallback` 主 backend 5xx → 自动切 fallback_chain（默认 `['edge-tts']`），内置 3 次重试 + 指数退避
+
+**Smoke test 已通过**：全部 9 模块 import + 4 个核心场景验证。
+
+### 兼容性
+
+- `register_episode(..., body="")`：`body` 是 keyword-only，默认 `""`，**老调用方式不受影响**
+- `build_episode_audio(...)`：返回 `(mp3, duration)`，**接口不变**
+- `stages.mark_reviewed(...)` / `prepare_file(...)`：**接口不变**，内部追加新行为
 
 ## 功能
 
@@ -60,17 +68,24 @@ Team 型（多角色协作团队，5 人）
 - 「用双人对话模式重新生成这期节目」
 - 「构建并发布节目站到 GitHub Pages」
 
-## 回滚（v1.1.0 → v1.0.0）
+## 回滚（三档）
 
 ```bash
-# 方式 A：从 git tag 回滚（推荐）
+# v1.2.0 → v1.1.1（去掉 src/ 改造，回到"建议"状态）
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+git checkout v1.1.1 -- .
+
+# v1.1.1 → v1.1.0（去掉 R1 真相 hotfix，回到含误诊的 v1.1.0）
+git checkout v1.1.0 -- .
+
+# v1.1.0 → v1.0.0（去掉全部 11 项治理增强，回到干净 baseline）
 git checkout v1.0.0 -- .
 
-# 方式 B：从物理归档回滚（git 损坏 / tag 误删时）
-cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+# 物理归档应急回滚（git 损坏 / tag 误删时）
 rsync -a --delete .archive/v1.0.0/ ./
 ```
+
+> **v1.2.0 src/ 改造向后兼容**：register_episode 的 `body` 是 keyword-only 默认 `""`，build_episode_audio 返回 2 元组（不变），stages.mark_reviewed / prepare_file 接口不变。所以 v1.2.0 → v1.1.1 回滚后，旧调用方式不受影响。
 
 详见 [.archive/README.md](./.archive/README.md)。
 

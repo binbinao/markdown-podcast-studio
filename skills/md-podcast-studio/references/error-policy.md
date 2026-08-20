@@ -1,6 +1,6 @@
-# Error Policy（v1.1.0 新增，Y2）
+# Error Policy（v1.1.0 文档化，v1.2.0 部分实现）
 
-> 把"出错了怎么办"显式编码。避免每个阶段都"先抛错再说"的混乱。
+> **v1.2.0 实际接入**：`FALLBACK_BACKEND` 在 `scripts/src/tts.py:build_episode_with_fallback` 实现；`RETRY_WITH_BACKOFF` 在 `_try_backend` 实现。其他 2 类（`STOP_AND_NOTIFY` / `DEGRADE`）保持文档化建议。
 
 ## 4 类错误策略
 
@@ -57,3 +57,25 @@ STOP_AND_NOTIFY
 - `hard-constraints.md` C1-C9 是**代码级已实现**的硬约束（ffmpeg concat、MiniMax 3 次重试等）
 - `error-policy.md` 是**团队级**的错误处理决策框架（覆盖代码级硬约束 + 文档化建议）
 - 冲突时以 `hard-constraints.md` 为准（代码真相源）；`error-policy.md` 仅补充未实现策略
+
+## v1.2.0 实际接入（fallback_chain 路径）
+
+`scripts/src/tts.py` 接入：
+- `_resolve_fallback_chain(cfg, primary)`：默认 `['edge-tts']`；用户可在 `config.yaml` 用 `tts.fallback_chain` 覆盖
+- `_try_backend(...)`：单 backend + 内置 3 次重试 + 指数退避；4xx/参数错不重试，5xx 重试
+- `build_episode_with_fallback(...)`：主 backend 失败 → 自动切 fallback chain；返回 `(mp3, duration, metrics)`
+
+配置示例：
+```yaml
+tts:
+  backend: minimax
+  fallback_chain: [edge-tts]   # 默认值；设为 [] 关闭 fallback
+```
+
+调用点（v1.2.0）：
+- `build.run_one()` 调 `build_episode_with_fallback`（替代原 `build_episode_audio`）
+- metrics `emit_phase3` 收集 `attempted_backends / success_backend / retries_total / degraded`
+
+未实现（v1.2.1 候选）：
+- `STOP_AND_NOTIFY` 在 prepare/build 各阶段的标准化接入（目前抛错由各模块自己处理）
+- `DEGRADE` 的具体接入点（如 validate_script 失败但可强制 publish 的场景）

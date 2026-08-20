@@ -99,3 +99,30 @@ humanize_stage ∈ {reviewed, frozen}  ← Phase 1.5 卡兹克版评审（若触
 audio_reviewed: true                 ← Phase 3 音频评审
 ↑ 3 门独立可过 / 可跳 / 可回退；build 据 final_reviewed（默认 = audio_reviewed）决定是否上线
 ```
+
+---
+
+## v1.2.0 新增字段（src/ 实际改造）
+
+### `episode_hash`（v1.2.0 真实接入）
+- 含义：**草稿正文**（不含 frontmatter）的 SHA256 前 16 位内容指纹（`scripts/src/episode_hash.py:hash_episode_body`）
+- 与 `source_hash` 的区别：
+ - `source_hash`：源稿 `raw/<slug>.md` 的指纹，raw 改了才变
+ - `episode_hash`：草稿正文指纹，草稿正文改了（含卡兹克写回 / 用户改字）就变
+- 接入：`feed.register_episode(out_dir, meta, slug, duration, size, body=body_text)` 写 manifest
+- **build 续跑**：同时比对两个 hash，任一变了就重生成（`episode_hash.py:should_resynthesize`）
+
+### `tts.fallback_chain`（v1.2.0 真实接入）
+- 含义：主 backend 5xx 失败 → 自动切换的备用 backend 列表
+- 默认：`['edge-tts']`（主 backend 不是 edge-tts 时兜底；主 backend 是 edge-tts 时 chain 为空）
+- 接入：`tts._resolve_fallback_chain(cfg, primary)` + `tts.build_episode_with_fallback(...)`
+- 重试：每个 backend 内置 3 次重试 + 指数退避（1s → 2s → 4s）
+- **关闭 fallback**：`tts.fallback_chain: []`
+
+### `pii`（v1.2.0 真实接入）
+- `enable`：bool，默认 `true`
+- `patterns`：list of `phone_cn / email / id_card_cn / bank_card / ipv4`；默认全部启用
+- `llm_verify`：bool，默认 `false`（v1.2.1 接线）
+- 接入：`prepare.prepare_file()` 草稿落盘前 `pii_scan.process(body, cfg)`
+- 报告路径：`drafts/<series>/.pii/ep-XX.json`
+- 失败不阻塞 prepare

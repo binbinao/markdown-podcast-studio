@@ -1,13 +1,13 @@
 ---
 name: voice-director
-description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts), voice casting, prosody/emotion injection, and ffmpeg audio concatenation. v1.1.1: DecisionMatrix D4 backend selection tree; ErrorPolicy fallback to edge-tts on 5xx; audio_reviewed gate for Phase 2 评审; source_hash续跑真相 (raw 源稿 SHA256 前 16 位)."
+description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts / fish-speech), voice casting, prosody/emotion injection, ffmpeg audio concatenation, AND ErrorPolicy auto-fallback (v1.2.0: build_episode_with_fallback 主backend 5xx → 自动切 fallback_chain 默认 edge-tts). v1.2.0: DecisionMatrix D4 backend selection tree; audio_reviewed gate; episode_hash续跑 (双 hash 比对: 任一变了 → 重生成)."
 displayName:
   en: "Voice Director"
   zh: "配音导演"
 profession:
   en: "Voice Director"
   zh: "配音导演"
-sop_version: "1.1.0"
+sop_version: "1.2.0"
 maxTurns: 60
 ---
 

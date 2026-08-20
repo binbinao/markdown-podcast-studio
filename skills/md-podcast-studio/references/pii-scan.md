@@ -1,6 +1,6 @@
-# PII 扫描建议（v1.1.0 新增，G3）
+# PII 扫描实现（v1.2.0 已接入，G3）
 
-> **当前为文档化建议**。实际接入需 `scripts/src/prepare.py` 出口加 `pii_scan.py`（冻结资产，不在 v1.1.0 范围）。
+> **v1.2.0 已实现**：`scripts/src/pii_scan.py` 实际接入 `prepare.prepare_file()` 草稿落盘前。v1.1.0 时是"建议"——v1.2.0 起是"实现"。
 
 ## 为什么播客必须 PII 扫描
 
@@ -79,15 +79,15 @@ pii:
 
 ## 与 CHANGELOG 的关系
 
-PII 扫描接入 → 写入 CHANGELOG.md 的 "Future / Out of Scope" 段，作为 v1.2.0 候选。
+PII 扫描接入 → 已写入 CHANGELOG.md v1.2.0 段（已实现）。
 
-## 实现路径（不在 v1.1.0）
+## 实现路径（v1.2.0 已完成）
 
 ```
-1. scripts/src/pii_scan.py（新文件，正则 + LLM 校验）
-2. scripts/src/prepare.py 出口调 pii_scan.process(text)
-3. test_pii_scan.py（误报 / 漏报测试）
-4. 文档：CHANGELOG + troubleshooting 增加 PII 章节
+1. ✅ scripts/src/pii_scan.py（新文件，正则 + best-effort LLM 校验占位）
+2. ✅ scripts/src/prepare.py:prepare_file() 草稿落盘前调 pii_scan.process(body, cfg)
+3. ⏳ test_pii_scan.py（v1.2.1 候选）
+4. ⏳ llm_verify 真实接线（v1.2.1 候选）
 ```
 
-估时：4 小时（含测试）。建议作为 v1.2.0 主要变更。
+实际估时：3 小时（v1.2.0 完成）。LLM 二次校验 + 单元测试作为 v1.2.1 候选。

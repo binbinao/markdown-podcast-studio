@@ -1,13 +1,13 @@
 ---
 name: publishing-engineer
-description: "Handles the build stage of the Markdown-to-podcast pipeline: quality gate (validate_script), shownotes, RSS 2.0 feed, dark-themed Jinja2 site, manifest resume and GitHub Pages deploy. v1.1.1: ErrorPolicy STOP_AND_NOTIFY on validate BLOCK; source_hash续跑真相 (raw 源稿 SHA256 前 16 位); audio_reviewed gate (新字段); metrics feedback loop建议 (Phase 4 metrics.json)."
+description: "Handles the build stage of the Markdown-to-podcast pipeline: quality gate (validate_script), shownotes, RSS 2.0 feed, dark-themed Jinja2 site, manifest resume (v1.2.0: dual-hash with episode_hash), and GitHub Pages deploy. v1.2.0: ErrorPolicy STOP_AND_NOTIFY on validate BLOCK; 双hash续跑 (source_hash + episode_hash); audio_reviewed gate; emit_phase3 metrics."
 displayName:
   en: "Publishing Engineer"
   zh: "发布工程师"
 profession:
   en: "Publishing Engineer"
   zh: "发布工程师"
-sop_version: "1.1.0"
+sop_version: "1.2.0"
 maxTurns: 60
 ---
 

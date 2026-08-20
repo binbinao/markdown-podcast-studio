@@ -1,19 +1,19 @@
 ---
 # === SOP 元数据（流程治理） ===
 name: md-podcast-studio
-version: 1.1.0
+version: 1.2.0
 owner: script-editor                       # SOP 修改权限归属（PR 评审需 owner + 主理人 + 用户）
 effective_from: 2026-08-20
 changelog_ref: ../../../CHANGELOG.md      # 变更日志相对路径
-supersedes: v1.0.0
-description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, optionally humanize via Khazix (Phase 1.5), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.1.1 adds SOP metadata, DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), and clarifies that source_hash is the raw article fingerprint (v1.1.0 episode_hash rename revoked)."
+supersedes: v1.1.1
+description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, optionally humanize via Khazix (Phase 1.5), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.0 implements episode_hash (draft fingerprint), metrics emission (5 stages), PII scan (prepare entry), and ErrorPolicy auto-fallback (tts layer)."
 ---
 
-# Markdown Podcast Studio — Skill (v1.1.0)
+# Markdown Podcast Studio — Skill (v1.2.0)
 
 把 Markdown 文章变成可上线播客的完整、可移植流水线。本 skill 自带**已验证可用**的流水线代码与工程模板，能在任意新仓库 scaffold 出一套 Markdown→播客工程。
 
-> **v1.1.0 变更驱动**：流程管控专家（30+ 年）诊断报告应用。详见 `CHANGELOG.md`。回滚方式见文末。
+> **v1.2.0 变更驱动**：v1.1.0/v1.1.1 文档化的 metrics / PII / ErrorPolicy fallback / 真正 episode_hash 从"建议"变为"实现"。详见 `CHANGELOG.md`。回滚方式见文末。
 
 ---
 
@@ -227,6 +227,71 @@ git checkout v1.0.0 -- .
 
 # 方式 B：从物理归档回滚（git 损坏 / tag 误删时）
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+```
+
+> **v1.1.1 → v1.1.0**：把 v1.1.1 误诊的 episode_hash 改名回滚，回 source_hash 真相。`git checkout v1.1.0 -- .`。
+> **v1.2.0 → v1.1.1**：把 src/ 实际改造回滚，文档层回归"建议"状态。`git checkout v1.1.1 -- .`。
+
+---
+
+## v1.2.0 治理层新增（src/ 实际改造）
+
+### 候选 1：真 episode_hash（草稿指纹）— `scripts/src/episode_hash.py`
+- **目的**：v1.1.1 真相（source_hash 是源稿指纹）+ 卡兹克改稿场景需要"草稿正文指纹"双重比对
+- **实现**：`hash_episode_body(body)` 算 SHA256 前 16 位（不含 frontmatter）
+- **接入**：`feed.register_episode(..., body=body_text)` 写 manifest；`build.run()` 续跑同时比对 source_hash + episode_hash
+- **续跑规则**（`should_resynthesize`）：
+ - 任一 hash 缺失（legacy / 首次 build）→ 重生成
+ - source_hash 变 → 重生成（raw 改了）
+ - episode_hash 变 → 重生成（草稿正文改了，含卡兹克写回 / 用户改字）
+ - 都未变 → 跳过
+
+### 候选 2：metrics 实际采集 — `scripts/src/metrics.py`
+- **目的**：v1.1.0 文档化的反馈环入口
+- **写入路径**：`output/metrics/<date>/phase*.json`（原子写）
+- **接入点**：
+ - `prepare_file()` 出口 → `emit_phase1(...)`
+ - `stages.mark_reviewed()` 出口 → `emit_phase2_review(...)`（best-effort）
+ - `build.run_one()` 出口 → `emit_phase3(...)`（含 ErrorPolicy metrics）
+- **Timer** 上下文管理器：`with Timer() as t: ... t.duration_sec` 自动记
+
+### 候选 3：PII 扫描接入 — `scripts/src/pii_scan.py`
+- **目的**：草稿出口脱敏私人信息（电话 / 邮箱 / 身份证 / 银行卡 / IP）
+- **接入点**：`prepare_file()` 草稿落盘前 `pii_scan.process(body, cfg)`
+- **报告**：`drafts/<series>/.pii/ep-XX.json`（hidden，build glob 不匹配）
+- **配置**（`config.yaml`）：
+  ```yaml
+  pii:
+    enable: true
+    patterns: [phone_cn, email, id_card_cn]   # 选启用哪些
+    llm_verify: false                          # 关闭（v1.2.1 接线）
+  ```
+- **失败不阻塞**：扫描失败仅 warn，不阻塞 prepare。
+
+### 候选 4：ErrorPolicy 自动 fallback — `scripts/src/error_policy.py` + `tts.py`
+- **目的**：主 backend 5xx 连续失败 → 自动切 fallback（默认 edge-tts）
+- **接入点**：`build.run_one()` 调 `tts.build_episode_with_fallback(...)`（替代原 `build_episode_audio`）
+- **Fallback chain**：默认 `['edge-tts']`（主 backend 不是 edge-tts 时兜底）；用户可在 `config.yaml` 覆盖 `tts.fallback_chain`
+- **重试策略**：每个 backend 内置 3 次重试 + 指数退避（1s → 2s → 4s）
+- **Metrics**：`build_episode_with_fallback` 返回 `(mp3, duration, metrics)`，含 `attempted_backends / success_backend / retries_total / degraded`
+
+### 兼容性总结
+
+- `register_episode(..., body="")`：`body` 是 keyword-only，默认 `""`，老调用方式不受影响
+- `build_episode_audio(...)` 返回 `(mp3, duration)`：**接口不变**，内部走 fallback 版
+- `stages.mark_reviewed(...)`：接口不变，metrics 写入 best-effort
+- `prepare_file(...)`：接口不变，内部加 PII 扫描 + metrics
+
+### Smoke Test（v1.2.0 已通过）
+
+详见 `CHANGELOG.md [1.2.0]` 段。已验证：episode_hash 业务逻辑 / should_resynthesize 4 场景 / PII 脱敏 / RetryConfig + is_retryable / metrics emit + read / 全部 9 模块 import + 函数签名。
+
+### Future / Out of Scope（v1.2.1 候选）
+
+- `pii_scan.llm_verify` 真实接线（识别中文姓名等启发式难覆盖）
+- `metrics.emit_phase5_summary` 在 build.py:run() 末尾自动调用
+- `ErrorPolicy` 文档化的 STOP_AND_NOTIFY / DEGRADE 在 prepare/build 各阶段接入
+- unit test 套件（`tests/test_*.py`）
 rsync -a --delete .archive/v1.0.0/ ./
 ```
 

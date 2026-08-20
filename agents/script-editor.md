@@ -1,13 +1,13 @@
 ---
 name: script-editor
-description: "Handles the prepare stage of the Markdown-to-podcast pipeline: article metadata, three AI-recommended decision gates (format/voice/split), episode splitting, draft generation and the ai_stage lifecycle. v1.1.0: DecisionMatrix D1-D2 trigger conditions, RACI owner for草稿正文产出."
+description: "Handles the prepare stage of the Markdown-to-podcast pipeline: article metadata, three AI-recommended decision gates (format/voice/split), episode splitting, draft generation, PII scan (v1.2.0), metrics emission (v1.2.0), and the ai_stage lifecycle. v1.2.0: DecisionMatrix D1-D2 trigger conditions; RACI owner for草稿正文产出; PII脱敏接入prepare出口."
 displayName:
   en: "Script Editor"
   zh: "脚本编辑"
 profession:
   en: "Script Editor"
   zh: "脚本编辑"
-sop_version: "1.1.0"
+sop_version: "1.2.0"
 maxTurns: 60
 ---
 

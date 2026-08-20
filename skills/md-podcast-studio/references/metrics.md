@@ -1,6 +1,7 @@
-# Metrics 采集建议（v1.1.0 新增，Y4）
+# Metrics 采集实现（v1.2.0 已接入，Y4）
 
-> **当前为文档化建议**。实际采集需 `scripts/src/` 改造（冻结资产，不在 v1.1.0 范围）。
+> **v1.2.0 已实现**。`scripts/src/metrics.py` 实际采集；prepare / mark-reviewed / build 各阶段自动 emit。
+> v1.1.0 时是"建议"——v1.2.0 起是"实现"。
 
 ## 设计原则（流程治理）
 
@@ -141,13 +142,15 @@ if metrics['user_review_time_hours'] > 2:
 
 metrics 触发的 SOP 改进 → 写入 CHANGELOG.md 的 "Future / Out of Scope" 段，让用户在下一次版本演进时看到"哪些指标建议接线"。
 
-## 实现路径（不在 v1.1.0）
+## 实现路径（v1.2.0 已完成）
 
 ```
-1. scripts/src/metrics.py（新文件，JSON 写入 + 时间戳）
-2. scripts/src/prepare.py / build.py 各阶段出口调 metrics.emit(...)
-3. scripts/src/build.py 读上次 phase5.json 触发 SOP 建议（feedback loop）
-4. test_metrics.py（指标正确性 + JSON schema 校验）
+1. ✅ scripts/src/metrics.py（新文件，JSON 写入 + 时间戳 + Timer + atomic write）
+2. ✅ scripts/src/prepare.py:prepare_file() 出口 → emit_phase1
+3. ✅ scripts/src/stages.py:mark_reviewed() 出口 → emit_phase2_review（best-effort）
+4. ✅ scripts/src/build.py:run_one() 出口 → emit_phase3（含 ErrorPolicy metrics）
+5. ⏳ scripts/src/build.py:run() 末尾 → emit_phase5_summary（v1.2.1 候选）
+6. ⏳ test_metrics.py（v1.2.1 候选）
 ```
 
-估时：6-8 小时（含测试）。建议作为 v1.2.0 主要变更。
+实际估时：4 小时（v1.2.0 完成）。单元测试作为 v1.2.1 候选。

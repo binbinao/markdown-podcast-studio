@@ -69,11 +69,13 @@ def prepare_file(
     drafts_dir: Path,
     auto_accept: bool = False,
 ) -> list[Path]:
-    article = path.read_text(encoding="utf-8")
-    fmt_default = str(cfg.get("format", "duo")).lower()
-    series_title, fmt, episodes, art_date, explicit_slug = _article_meta(
-        article, path, fmt_default
-    )
+    from .metrics import Timer
+    with Timer() as timer:
+        article = path.read_text(encoding="utf-8")
+        fmt_default = str(cfg.get("format", "duo")).lower()
+        series_title, fmt, episodes, art_date, explicit_slug = _article_meta(
+            article, path, fmt_default
+        )
     # series_slug：frontmatter series_slug 优先 → 否则用 explicit_slug（来自
     # frontmatter slug 或 raw 文件名）→ 兜底用 ascii(title)。兜底路径只在
     # 极端异常（既无 frontmatter 又无 YYYY-MM-DD 前缀的文件名）时触发。
@@ -148,10 +150,45 @@ def prepare_file(
         if decisions.split_strategy:
             plan.split_strategy = decisions.split_strategy
         script = generate_script(plan, cfg, source_rel)
+        # v1.2.0：PII 扫描（草稿正文落盘前脱敏私人信息）
+        try:
+            from .pii_scan import process as _pii_process, write_report as _pii_write
+            from .episode_hash import split_frontmatter as _split_fm
+            _fm, _body = _split_fm(script)
+            _pii_res = _pii_process(_body, cfg)
+            if _pii_res.has_pii:
+                log.warning(f"  ⚠ PII 扫描发现 {_pii_res.counts}（ep={plan.episode_index}）")
+                # 把脱敏后的正文写回 script
+                script = _fm + _pii_res.redacted_text
+                # 报告写到 drafts/<series>/.pii/ep-XX.json（hidden，不被 build glob 匹配）
+                _pii_dir = out_dir / ".pii"
+                _pii_write(_pii_res, _pii_dir / f"ep-{plan.episode_index:02d}.json")
+        except Exception as e:  # noqa: BLE001 — PII 失败不阻塞 prepare
+            log.warning(f"⚠ PII 扫描失败（不影响 prepare）: {e}")
         f = out_dir / draft_filename(plan)
         f.write_text(script, encoding="utf-8")
         made.append(f)
     log.info(f"  {path.name} → 《{series_title}》{len(plans)} 集 → {out_dir}")
+    # v1.2.0：emit_phase1 metrics（output/metrics/<date>/phase1.json）
+    try:
+        from .metrics import emit_phase1
+        fm_format = str(meta.get("format", "")).lower()
+        fm_voice = str(meta.get("voice", "")).strip()
+        fm_split = str(meta.get("split_strategy", "")).strip()
+        frontmatter_complete = (
+            fm_format in ("solo", "duo") and bool(fm_voice) and bool(fm_split)
+        )
+        emit_phase1(
+            Path(drafts_dir),
+            article_path=str(path),
+            episode_count=len(plans),
+            decision_gate_skipped=frontmatter_complete,
+            frontmatter_complete=frontmatter_complete,
+            llm=None,
+            duration_sec=timer.duration_sec,
+        )
+    except Exception as e:  # noqa: BLE001 — metrics 失败不阻塞 prepare
+        log.warning(f"⚠ emit_phase1 失败（不影响 prepare）: {e}")
     return made
 
 

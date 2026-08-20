@@ -20,7 +20,7 @@ from .feed import build_feed, build_index, register_episode, write_shownotes
 from .log import logger as log
 from .ingest import parse_script, slugify
 from .stages import stage_of, stage_warning
-from .tts import build_episode_audio
+from .tts import build_episode_audio, build_episode_with_fallback
 from .voicecaster import cast as vc_cast
 
 
@@ -122,7 +122,8 @@ def run_one(
         size = mp3.stat().st_size
         log.info(f"      → (skip) {mp3}  ({duration // 60}分{duration % 60}秒, {size // 1024}KB)")
     else:
-        mp3, duration = build_episode_audio(
+        # v1.2.0：走带 fallback 的版本，采集 ErrorPolicy metrics
+        mp3, duration, tts_metrics = build_episode_with_fallback(
             segments, voice_map, cfg, out_dir, title,
             series_title=series_title_v,
             series_slug=series_slug,
@@ -131,13 +132,32 @@ def run_one(
         ep_dir = mp3.parent
         size = mp3.stat().st_size
         log.info(f"      → {mp3}  ({duration // 60}分{duration % 60}秒, {size // 1024}KB)")
+        # v1.2.0：emit_phase3 metrics（每集）
+        try:
+            from .metrics import emit_phase3
+            emit_phase3(
+                out_dir,
+                episode_path=str(episode_path),
+                backend=tts_metrics.get("success_backend") or cfg.get("tts", {}).get("backend", "edge-tts"),
+                voice_id=str(voice_map.get("default", "")),
+                episodes_synthesized=1,
+                episodes_failed=0,
+                retries_total=tts_metrics.get("retries_total", 0),
+                avg_synth_duration_sec=round(duration, 2),
+                total_audio_sec=duration,
+                cost_estimate_usd=None,
+                duration_sec=0.0,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     log.info("[4/5] 写 shownotes")
     write_shownotes(ep_dir, meta, segments, duration)
 
     log.info("[5/5] 更新 RSS / 节目站")
     slug = meta.get("series_slug") or slugify(meta.get("series") or title)
-    register_episode(out_dir, meta, slug, duration, size)
+    # v1.2.0：传 body 让 register_episode 算 episode_hash
+    register_episode(out_dir, meta, slug, duration, size, body=body_text)
 
 
 SKIP_AUDIO = False
@@ -208,17 +228,31 @@ def run(
     for i, s in enumerate(scripts, 1):
         # 预解析 frontmatter 拿 series_slug + ep_index 算 _key
         from .ingest import parse_script
-        meta_pre, _ = parse_script(s.read_text(encoding="utf-8"))
+        from .episode_hash import episode_hash_of, split_frontmatter
+        raw_pre = s.read_text(encoding="utf-8")
+        meta_pre, _ = parse_script(raw_pre)
+        _, body_pre = split_frontmatter(raw_pre)
         series_slug = meta_pre.get("series_slug", "")
         ep_idx = int(meta_pre.get("episode", 1) or 1)
         key = f"{series_slug}::ep-{ep_idx:02d}"
 
-        # 断点续传：已成功且 source_hash 未变 → 跳过
+        # 断点续传：已成功且 hash 都未变 → 跳过（v1.2.0：双重 hash 比对）
         if not force and not retry_failed and key in existing_keys:
             old = existing_keys[key]
             from .feed import _hash_source
             src_h = _hash_source(meta_pre.get("source", ""))
-            if src_h and old.get("source_hash") == src_h:
+            ep_h = episode_hash_of(meta_pre, body_pre)
+            old_src = old.get("source_hash")
+            old_ep = old.get("episode_hash")
+            # v1.2.0 续跑规则（episode_hash.py:should_resynthesize）：
+            # - 缺任意 hash（legacy）→ 重生成
+            # - source_hash 变 → 重生成（raw 改了）
+            # - episode_hash 变 → 重生成（草稿正文改了）
+            # - 都未变 → 跳过
+            both_present = bool(src_h) and bool(ep_h) and bool(old_src) and bool(old_ep)
+            same_src = old_src == src_h
+            same_ep = old_ep == ep_h
+            if both_present and same_src and same_ep:
                 # 检查 mp3 是否真存在
                 mp3 = out_dir / "series" / series_slug / f"ep-{ep_idx:02d}" / "episode.mp3"
                 if mp3.exists():

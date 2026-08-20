@@ -4,6 +4,66 @@
 
 ---
 
+## [1.2.0] — 2026-08-20 — src/ 实际改造（4 候选落地）
+
+> **变更驱动**：v1.1.0/v1.1.1 文档化的 metrics / PII / ErrorPolicy fallback / 真正 episode_hash 从"建议"变为"实现"。
+> **变更范围**：`scripts/src/` 实际改造 + 文档同步。**首次动冻结资产**，按 hard-constraints C1（不动 src/ 业务逻辑）部分妥协 — 但所有改动都向后兼容 + 不破坏 ai_stage / source_hash 契约。
+> **回滚**：`git checkout v1.1.1 -- .`
+
+### Added（src/ 实际改造）
+
+- **`scripts/src/episode_hash.py`（新文件，~110 行）**：草稿正文（不含 frontmatter）SHA256 前 16 位指纹。导出 `hash_episode_body` / `episode_hash_of` / `split_frontmatter` / `should_resynthesize`。**这是 v1.1.0 误诊的"episode_hash 命名约定"的真正实现**，但语义与 v1.1.0 错描述不同（v1.1.0 误把 source_hash 改名 episode_hash；v1.2.0 真正新增 episode_hash 作为草稿正文指纹）。
+- **`scripts/src/metrics.py`（新文件，~190 行）**：每阶段指标采集。导出 `Timer` + `emit_phase1/1.5/2/3/4/5_summary` + `read_phase`。写到 `output/metrics/<date>/phase*.json`，原子写入。
+- **`scripts/src/pii_scan.py`（新文件，~210 行）**：PII 扫描。默认正则覆盖 `phone_cn / email / id_card_cn / bank_card / ipv4`，可配置启用 + 占位符替换。LLM 二次校验 `llm_verify=false` 占位（v1.2.1 接线）。失败不阻塞 prepare。
+- **`scripts/src/error_policy.py`（新文件，~95 行）**：4 类错误策略（STOP_AND_NOTIFY / RETRY_WITH_BACKOFF / FALLBACK_BACKEND / DEGRADE）+ `RetryConfig` / `is_retryable_exception` / `apply_policy` / `record_metrics`。
+- **`scripts/src/tts.py`**：新增 `build_episode_with_fallback`（带 fallback 的版本），主 backend 失败 → 自动切 fallback_chain（默认 `['edge-tts']`）。原 `build_episode_audio` 走 `build_episode_with_fallback` 内部，向后兼容。
+- **`scripts/src/feed.py:register_episode`**：加 `body: str = ""` 参数（v1.2.0 关键字参数，向后兼容），写 `episode_hash` 到 manifest。
+
+### Changed（现有 src/ 改造）
+
+- **`scripts/src/build.py:run()` 续跑逻辑**：从"单 source_hash 比对"升级到"双重 hash 比对（source_hash + episode_hash）"。规则：任一 hash 缺失（legacy）→ 重生成；都未变 → 跳过；任一变了 → 重生成。**这是 v1.1.0 误诊的修正 + v1.1.1 真相的工程化**——卡兹克改稿 / 用户改字 → episode_hash 变 → 重生成。
+- **`scripts/src/build.py:run_one()`**：调 `build_episode_with_fallback` 采集 TTS metrics + emit_phase3。
+- **`scripts/src/prepare.py:prepare_file()`**：草稿落盘前 `pii_scan.process(body)` + 报告写到 `drafts/<series>/.pii/ep-XX.json`；出口 `emit_phase1` metrics。
+- **`scripts/src/stages.py:mark_reviewed()`**：调 `emit_phase2_review` metrics（best-effort，失败不阻塞评审）。
+
+### 文档同步
+
+- **`skills/md-podcast-studio/SKILL.md`**：v1.2.0 description + 治理层新增段（metrics/PII/ErrorPolicy 实际接入说明）。
+- **`skills/md-podcast-studio/references/config-spec.md`**：新增 `pii` 字段、`tts.fallback_chain` 字段说明；episode_hash 字段从 v1.1.1 文档化契约升级为 v1.2.0 真实接入。
+- **`skills/md-podcast-studio/references/metrics.md`**：从"建议"升级为"已实现"，标注调用点。
+- **`skills/md-podcast-studio/references/error-policy.md`**：从"建议"升级为"已实现 tts 层 fallback"，标注 `_resolve_fallback_chain` + `build_episode_with_fallback`。
+- **`skills/md-podcast-studio/references/pii-scan.md`**：从"建议"升级为"已实现 prepare 出口"。
+- **`README.md`**：加 v1.2.0 关键能力清单 + smoke test 通过记录。
+- **`.codebuddy-plugin/plugin.json`**：version 1.1.1 → 1.2.0 / description 同步。
+- **5 个 agent MD 文件**：同步 v1.2.0 真实接入（episode_hash / metrics / PII / ErrorPolicy fallback）。
+
+### 兼容性（关键）
+
+- `register_episode(out_dir, meta, slug, duration, size, *, body="")`：`body` 是 keyword-only，默认 `""`，**老调用方式不受影响**
+- `build_episode_audio(...)` 返回 `(mp3, duration)`：**接口不变**，内部走 `build_episode_with_fallback`
+- `stages.mark_reviewed(target, stage=...)`：**接口不变**，内部追加 metrics 写入（best-effort）
+- `prepare_file(...)`：**接口不变**，内部追加 PII 扫描 + metrics
+
+### Smoke Test（已通过）
+
+```
+✅ episode_hash 正文: ba3510655cec96bb, 改字后: f0eaccfac17e98fe（变）
+✅ should_resynthesize 4 个场景全部正确（legacy/都未变/源改/草稿改）
+✅ PII: phone_cn + email 正确识别并脱敏
+✅ ErrorPolicy: RetryConfig + is_retryable_exception 正确
+✅ metrics: emit_phase1 + read_phase 完整闭环
+✅ 全部 9 个模块 import 成功（build / prepare / feed / stages / tts / episode_hash / metrics / pii_scan / error_policy）
+```
+
+### Future / Out of Scope（v1.2.1 候选）
+
+- `pii_scan.llm_verify` 真实接线（识别中文姓名等启发式难覆盖）
+- `metrics.emit_phase5_summary` 在 build.py:run() 末尾自动调用
+- `ErrorPolicy` 文档化的 STOP_AND_NOTIFY / DEGRADE 在 prepare/build 各阶段接入
+- unit test 套件（`tests/test_*.py`）
+
+---
+
 ## [1.1.1] — 2026-08-20 — R1 数据血缘真相澄清（hotfix）
 
 > **变更驱动**：审阅 `scripts/src/feed.py` 第 181 行 `_hash_source(source_rel)` 后发现 v1.1.0 的 R1 应用有误诊断。

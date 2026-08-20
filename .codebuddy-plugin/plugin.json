@@ -1,7 +1,7 @@
 {
   "name": "markdown-podcast-studio",
-  "version": "1.1.1",
-  "description": "v1.1.1 治理升级（hotfix R1）：SOP metadata + DecisionMatrix D1-D5 + RACI + ErrorPolicy + 多门禁（humanize_stage / audio_reviewed）+ source_hash 真相澄清（v1.1.0 误诊的 episode_hash 改名已撤销）。",
+  "version": "1.2.0",
+  "description": "v1.2.0 src/ 实际改造：episode_hash 草稿指纹（双 hash 续跑）+ metrics 实际采集（5 阶段）+ PII 扫描接入 prepare + ErrorPolicy 自动 fallback（主 backend 失败 → edge-tts）。",
   "author": {
     "name": "纪多斌",
     "email": "duobin.ji@example.com"
@@ -33,8 +33,8 @@
     "zh": "Markdown 播客工作室"
   },
   "displayDescription": {
-    "en": "Turn Markdown articles into a published podcast: smart script splitting, optional Khazix human-voice polish, AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.1.1: SOP metadata + DecisionMatrix + RACI + ErrorPolicy + multi-gate (humanize_stage / audio_reviewed) + source_hash clarity (episode_hash rename revoked).",
-    "zh": "v1.1.1 治理升级（hotfix R1）：SOP 元数据 + 5 决策点 + 7×4 RACI + 4 类错误策略 + 3 道独立评审门。功能不变：智能拆脚本、卡兹克活人感抛光、AI 配音、RSS、节目站、GitHub Pages。"
+    "en": "Turn Markdown articles into a published podcast: smart script splitting, optional Khazix human-voice polish, AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.0: episode_hash 草稿指纹 + 双 hash 续跑 + metrics 实际采集 + PII 扫描接入 + ErrorPolicy 自动 fallback。",
+    "zh": "v1.2.0 src/ 实际改造：episode_hash 草稿指纹（双 hash 续跑）+ metrics 5 阶段采集 + PII 扫描接入 prepare + ErrorPolicy 自动 fallback（主 backend 失败 → edge-tts）。功能不变：SOP 元数据 + 5 决策点 + 7×4 RACI + 3 道评审门。"
   },
   "avatar": "avatars/markdown-podcast-studio-team-lead.png",
   "categoryId": "06-ContentCreative",
@@ -47,7 +47,7 @@
     { "en": "Markdown-to-Podcast", "zh": "文字转播客" },
     { "en": "Content Pipeline", "zh": "内容流水线" },
     { "en": "Audio Production", "zh": "音频制作" },
-    { "en": "Workflow Governance v1.1.0", "zh": "流程治理 v1.1.0" }
+    { "en": "PII & Metrics v1.2.0", "zh": "PII + 度量 v1.2.0" }
   ],
   "quickPrompts": [
     { "en": "Turn this Markdown into a podcast episode", "zh": "把这篇 Markdown 变成一档播客" },

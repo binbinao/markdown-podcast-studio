@@ -189,10 +189,19 @@ def _hash_source(source_rel: str) -> str | None:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
 
 
-def register_episode(out_dir: Path, meta: dict[str, Any], slug: str, duration: int, size: int) -> None:
+def register_episode(
+    out_dir: Path,
+    meta: dict[str, Any],
+    slug: str,
+    duration: int,
+    size: int,
+    *,
+    body: str = "",
+) -> None:
     """注册一集到 manifest。已存在则保留原 date（首次 build 写入的日期）。
 
     slug = series_slug（用于构建 output/series/<slug>/ep-XX/episode.mp3 URL）。
+    body：草稿正文（不含 frontmatter），用于算 episode_hash（v1.2.0 引入）。
     """
     data = load_manifest(out_dir)
     eps = data["episodes"]
@@ -203,6 +212,9 @@ def register_episode(out_dir: Path, meta: dict[str, Any], slug: str, duration: i
     old = next((e for e in eps if e.get("_key") == key), None)
     today = date.today().isoformat()
     src_hash = _hash_source(meta.get("source", ""))
+    # episode_hash（v1.2.0 引入）：草稿正文（不含 frontmatter）的指纹
+    from .episode_hash import episode_hash_of
+    ep_hash = episode_hash_of(meta, body)
     # source hash 变化：raw 文章改了，但音频没重生成 → warn
     if old and src_hash and old.get("source_hash") and old["source_hash"] != src_hash:
         from .log import logger as log
@@ -231,6 +243,7 @@ def register_episode(out_dir: Path, meta: dict[str, Any], slug: str, duration: i
         "chapter": meta.get("chapter", ""),
         "voice": meta.get("voice", ""),
         "source_hash": src_hash,
+        "episode_hash": ep_hash,
     }
     eps = [e for e in eps if e.get("_key") != key]
     eps.insert(0, entry)

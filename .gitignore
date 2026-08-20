@@ -12,3 +12,8 @@ Thumbs.db
 
 # 物理归档目录（冗余备份，独立于 git tag）。见 .archive/README.md
 .archive/
+
+# Python bytecode（smoke test 生成，不进 git）
+__pycache__/
+*.pyc
+*.pyo

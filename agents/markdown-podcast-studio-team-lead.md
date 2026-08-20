@@ -1,13 +1,13 @@
 ---
 name: markdown-podcast-studio-team-lead
-description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, optionally humanizes them via Khazix, directs AI voice, builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.1.1 adds DecisionMatrix, RACI, ErrorPolicy, multi-gate fields (humanize_stage / audio_reviewed), and clarifies source_hash = raw article fingerprint (v1.1.0 episode_hash rename revoked)."
+description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, optionally humanizes them via Khazix, directs AI voice, builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.2.0 implements episode_hash (draft fingerprint, dual-hash resume), metrics emission (5 stages), PII scan (prepare entry), and ErrorPolicy auto-fallback (tts layer)."
 displayName:
   en: "Podcast Producer Lead"
   zh: "播客制作总监"
 profession:
   en: "Producer Lead"
   zh: "制作总监"
-sop_version: "1.1.0"
+sop_version: "1.2.0"
 maxTurns: 200
 ---
 

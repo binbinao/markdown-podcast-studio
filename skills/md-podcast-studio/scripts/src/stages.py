@@ -115,4 +115,26 @@ def mark_reviewed(target: Path, stage: str = STAGE_REVIEWED) -> list[tuple[Path,
     drafts = iter_drafts(target)
     if not drafts:
         raise ValueError(f"{target} 下没有 ep-XX.md draft")
-    return [(p, set_stage(p, stage)) for p in drafts]
+    results = [(p, set_stage(p, stage)) for p in drafts]
+    # v1.2.0：emit_phase2_review metrics（best-effort，失败不阻塞评审门）
+    try:
+        from .metrics import emit_phase2_review
+        # 启发式找 project root（含 raw/ 或 config.yaml）
+        proj = Path(target).resolve()
+        for _ in range(5):
+            if (proj / "config.yaml").exists() or (proj / "raw").exists():
+                break
+            parent = proj.parent
+            if parent == proj:
+                break
+            proj = parent
+        for p, old in results:
+            emit_phase2_review(
+                proj,
+                episode_path=str(p),
+                stage_from=old,
+                stage_to=stage,
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return results
