@@ -1,0 +1,13 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# WorkBuddy runtime
+.workbuddy-tmp/
+
+# 保留: 物理归档目录不进 git (那是冗余备份)

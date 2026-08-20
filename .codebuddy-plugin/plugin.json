@@ -1,0 +1,95 @@
+{
+  "name": "markdown-podcast-studio",
+  "version": "1.0.0",
+  "description": "把长文章一键变成上线播客：智能拆脚本、可选卡兹克活人感抛光、AI 配音（MiniMax / edge-tts / fish-speech）、生成 RSS 与暗色节目站并部署。",
+  "author": {
+    "name": "纪多斌",
+    "email": "duobin.ji@example.com"
+  },
+  "agents": [
+    "./agents/markdown-podcast-studio-team-lead.md",
+    "./agents/script-editor.md",
+    "./agents/script-humanizer.md",
+    "./agents/voice-director.md",
+    "./agents/publishing-engineer.md"
+  ],
+  "skills": [
+    "./skills/md-podcast-studio"
+  ],
+
+  "expertType": "team",
+  "agentName": "markdown-podcast-studio-team-lead",
+  "teamInfo": {
+    "leadAgent": "markdown-podcast-studio-team-lead",
+    "memberAgents": ["script-editor", "script-humanizer", "voice-director", "publishing-engineer"]
+  },
+
+  "displayName": {
+    "en": "Markdown Podcast Studio",
+    "zh": "Markdown 播客工作室"
+  },
+  "profession": {
+    "en": "Markdown Podcast Studio",
+    "zh": "Markdown 播客工作室"
+  },
+  "displayDescription": {
+    "en": "Turn Markdown articles into a published podcast: smart script splitting, optional Khazix human-voice polish, AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy.",
+    "zh": "把长文章一键变成上线播客：智能拆脚本、可选卡兹克活人感抛光、AI 配音（三后端）、生成 RSS 与暗色节目站并部署。"
+  },
+  "avatar": "avatars/markdown-podcast-studio-team-lead.png",
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "把这篇 Markdown 变成一档播客",
+    "en": "Turn this Markdown into a podcast episode"
+  },
+  "plugin": "markdown-podcast-studio",
+  "tags": [
+    { "en": "Markdown-to-Podcast", "zh": "文字转播客" },
+    { "en": "Content Pipeline", "zh": "内容流水线" },
+    { "en": "Audio Production", "zh": "音频制作" },
+    { "en": "Human-Voice Polish", "zh": "活人感抛光" }
+  ],
+  "quickPrompts": [
+    { "en": "Turn this Markdown into a podcast episode", "zh": "把这篇 Markdown 变成一档播客" },
+    { "en": "Regenerate this episode in duo dialogue mode", "zh": "用双人对话模式重新生成这期节目" },
+    { "en": "Polish the draft with Khazix before TTS", "zh": "配音前让卡兹克先活人感抛光" },
+    { "en": "Build and publish the site to GitHub Pages", "zh": "构建并发布节目站到 GitHub Pages" }
+  ],
+  "members": [
+    {
+      "id": "markdown-podcast-studio-team-lead",
+      "displayName": { "en": "Podcast Producer Lead", "zh": "播客制作总监" },
+      "profession": { "en": "Producer Lead", "zh": "制作总监" },
+      "avatar": "avatars/markdown-podcast-studio-team-lead.png",
+      "role": "lead"
+    },
+    {
+      "id": "script-editor",
+      "displayName": { "en": "Script Editor", "zh": "脚本编辑" },
+      "profession": { "en": "Script Editor", "zh": "脚本编辑" },
+      "avatar": "avatars/script-editor.png",
+      "role": "member"
+    },
+    {
+      "id": "script-humanizer",
+      "displayName": { "en": "Khazix", "zh": "卡兹克" },
+      "profession": { "en": "Human-Voice Script Reviser", "zh": "播客活人感改稿官" },
+      "avatar": "avatars/khazix.png",
+      "role": "member"
+    },
+    {
+      "id": "voice-director",
+      "displayName": { "en": "Voice Director", "zh": "配音导演" },
+      "profession": { "en": "Voice Director", "zh": "配音导演" },
+      "avatar": "avatars/voice-director.png",
+      "role": "member"
+    },
+    {
+      "id": "publishing-engineer",
+      "displayName": { "en": "Publishing Engineer", "zh": "发布工程师" },
+      "profession": { "en": "Publishing Engineer", "zh": "发布工程师" },
+      "avatar": "avatars/publishing-engineer.png",
+      "role": "member"
+    }
+  ]
+}

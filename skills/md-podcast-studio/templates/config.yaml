@@ -1,0 +1,102 @@
+# myPodcast 配置
+# TTS 后端：edge-tts（免费，零依赖，单调）/ minimax（情感/22拟声词，需 API Key）
+# 切换时 voices 与 voices_minimax 对应不同后端使用的音色 ID。
+
+podcast:
+  title: "小搭-斌哥电台"
+  author: "小搭 & 斌哥"
+  language: "zh-CN"
+  website: "https://binbinao.github.io/myPodcast"   # 节目站地址（RSS 绝对链接 / Apple 订阅用）
+  description: "把文章、白皮书、长文，变成能听的电台。"   # 全局描述（meta/og/RSS）
+  tagline: "把文章变成能听的电台节目。"                   # 站点 1-2 处的核心 slogan（M2-3 收敛）
+  hero_desc: |                                          # Hero 区 slogan 下方的一段扩展：吸引听众来听
+    一杯咖啡的时间，换一种读法。我们替你把那些值得反复看的文章
+    念完——白皮书、行业分析、长文笔记，拆成十几分钟的音频，
+    随时点开就能听。通勤路上、眼睛累了、想慢下来的时候，
+    让耳朵替你把好内容读完。
+  about: |                                              # M2-3 增 About 人味：主播自述/缘起/节奏
+    小搭电台是「小搭」和「斌哥」自用的个人播客流水线 —— 我们读文章、做笔记，
+    然后让 AI 把值得反复听的部分讲出来，放到这里。不追热点，不做新闻，
+    节奏是「每周或每两周一期」，来源是我们最近在读、值得慢下来读的东西。
+    如果你也喜欢把文章听进去，欢迎订阅。
+  cover: "cover.jpg"               # 节目封面图（og:image）
+  subscribe:                      # 站点"在更多地方听"订阅区块；enabled: false = 隐藏
+    enabled: false
+
+# edge-tts 角色音色（zh-CN-XiaoxiaoNeural=女温暖, zh-CN-YunxiNeural=男活力, zh-CN-YunyangNeural=男新闻, zh-CN-XiaoyiNeural=女温柔）
+voices:
+  host: "zh-CN-XiaoxiaoNeural"
+  guest: "zh-CN-YunxiNeural"
+  default: "zh-CN-XiaoxiaoNeural"
+
+# MiniMax 角色音色（speech-2.8-hd 推荐；详见 src/tts_minimax.py 的 COMMON_ZH_VOICES）
+# female-yujie 御姐 / female-shaonv 少女 / female-chengshu 成熟 / female-tianmei 甜美
+# male-qn-qingse 青涩青年 / male-qn-jingying 精英青年 / male-qn-badao 霸道青年 / male-qn-daxuesheng 大学生
+# audiobook_male_1/2 男性有声书 / audiobook_female_1/2 女性有声书（适合反思/独白）
+voices_minimax:
+  host: "audiobook_male_1"   # 单人/host：默认有声书男声，沉稳不抢情绪
+  guest: "male-qn-qingse"    # 嘉宾：青涩青年（duo 节目用）
+  default: "audiobook_male_1"
+
+# 音色智能选型（基于文章内容自动选 voice_id）
+# 优先级：frontmatter voice 字段 > LLM 推断(mode=llm 且 api_key 配了) > 启发式规则 > default_voice
+# 文章类型 → 音色映射见 src/voicecaster.py 的 ARTICLE_TYPES
+voicecaster:
+  mode: rule                 # rule（零依赖，默认） | llm
+  default_voice: "audiobook_male_1"  # 兜底音色
+
+# TTS 参数
+tts:
+  backend: "minimax"         # edge-tts | minimax
+  rate: "+0%"                # 语速（仅 edge-tts 全局模式用）
+  volume: "+0%"              # 音量
+  pitch: "+0Hz"
+  pause_ms: 600              # 每段之间的停顿(毫秒)
+  # MiniMax 配置（仅当 backend=minimax 时生效）
+  minimax:
+    base_url: "https://api.minimaxi.com/v1/t2a_v2"
+    # api_key 不推荐写文件，优先用环境变量 MINIMAX_API_KEY；这里只是兜底
+    api_key: ""
+    model: "speech-2.8-hd"   # 推荐 speech-2.8-hd；turbo 更便宜；2.6/2.0 兜底
+    speed: 1.0               # [0.5, 2]
+    vol: 1.0                 # (0, 10]
+    pitch: 0                 # [-12, 12]
+
+# 韵律规划：缓解单人播客语调单调
+# enable: 是否按句注入 prosody
+# mode:   heuristic(零依赖,按标点规则) | llm(需 llm.api_key)
+# 注：heuristic 输出 emotion(calm/happy/sad/surprised/...)；minimax 用，edge-tts 忽略
+prosody:
+  enable: true
+  mode: heuristic
+
+# 默认单/双人形式：solo(单人) / duo(双人)。每篇文章可用 frontmatter 的 format 覆盖。
+format: "duo"
+
+# 目录
+raw_dir: "raw"        # 原始文章（markdown）
+drafts_dir: "drafts"  # prepare 生成的脚本草稿（评审门，审完再 build）
+
+# 分集切分
+split:
+  min_episode_chars: 600    # 小于此字数的章节合并进上一集
+  max_episode_chars: 3000   # 单集上限，超出按 H3/段落继续切
+
+# 可选 LLM 润色（推荐开，走 MiniMax 兼容 OpenAI 的 chat 接口）
+# api_key 留空时会自动从 env LLM_API_KEY / MINIMAX_API_KEY / OPENAI_API_KEY 取
+# 端点检测到 "minimax" 字串时会自动加 thinking.disabled + reasoning_split，
+# 避免 MiniMax 模型把 tokens 全部烧在 reasoning 上导致 content 为空
+llm:
+  enable: true
+  base_url: "https://api.minimaxi.com/v1"
+  api_key: ""
+  model: "MiniMax-M2.5"
+  # 单集口播稿目标 ~3000-4000 字（中文口播 ~250 字/分 → 12-16 分钟）。
+  # 曾为 1500：截断长稿，是"产出集偏短"的一条成因。
+  max_tokens: 4000
+  temperature: 0.7
+  # 润色提示词（把书面文改成口语播客稿）
+  prompt: |
+    你是一名播客文案编辑。把下面的书面内容改写成自然、口语化、适合双人播客朗读的脚本。
+    用 [host] 和 [guest] 标注说话人，交替发言。保留关键信息，去掉冗余书面词，
+    适当加入过渡句和互动。只输出脚本正文，不要解释。

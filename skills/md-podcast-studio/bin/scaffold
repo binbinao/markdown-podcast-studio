@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# scaffold — instantiate a fresh Markdown→Podcast project from this expert's bundled assets.
+# Usage: bin/scaffold [TARGET_DIR]   (default: ./my-podcast)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILL_ROOT="$(dirname "$SCRIPT_DIR")"
+SRC="$SKILL_ROOT/scripts/src"
+TPL="$SKILL_ROOT/templates"
+
+TARGET="${1:-./my-podcast}"
+
+if [ -e "$TARGET" ] && [ -n "$(ls -A "$TARGET" 2>/dev/null)" ]; then
+  echo "❌ Target '$TARGET' already exists and is not empty. Aborting." >&2
+  exit 1
+fi
+
+echo "🚀 Scaffolding Markdown→Podcast project at: $TARGET"
+mkdir -p "$TARGET"/{raw,drafts,output,src}
+mkdir -p "$TARGET/templates/site" "$TARGET/.github/workflows"
+
+# Pipeline code
+cp -R "$SRC/." "$TARGET/src/"
+
+# Config + deps
+cp "$TPL/config.yaml"           "$TARGET/config.yaml"
+cp "$TPL/pyproject.toml"        "$TARGET/pyproject.toml"
+cp "$TPL/requirements.txt"      "$TARGET/requirements.txt"
+cp "$TPL/requirements.lock"     "$TARGET/requirements.lock"
+
+# Site templates + CI
+cp -R "$TPL/site/."             "$TARGET/templates/site/"
+cp "$TPL/github/workflows/publish.yml" "$TARGET/.github/workflows/publish.yml"
+
+# ffmpeg check (not pip-installable)
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  echo "⚠️  ffmpeg/ffprobe not found. Install it (e.g. 'brew install ffmpeg' on macOS) before running the pipeline."
+fi
+
+echo ""
+echo "✅ Done. Next steps:"
+echo "   cd $TARGET"
+echo "   python -m venv .venv && . .venv/bin/activate"
+echo "   pip install -r requirements.lock"
+echo "   git init && git lfs install   # mp3 artifacts are tracked via git-LFS"
+echo "   cp your-article.md raw/$(date +%Y-%m-%d)-my-article.md"
+echo "   export MINIMAX_API_KEY=...     # for minimax TTS (edge-tts needs no key)"
+echo "   python -m src.prepare --yes"
+echo "   python -m src.prepare --mark-reviewed drafts/<date-slug>"
+echo "   python -m src.build drafts/"
+echo "   git add output drafts && git commit -m 'new episodes' && git push   # deploys to GitHub Pages"

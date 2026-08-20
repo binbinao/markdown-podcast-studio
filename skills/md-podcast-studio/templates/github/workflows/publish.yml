@@ -1,0 +1,75 @@
+name: publish site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "output/**"
+      - "drafts/**"
+      - "src/**"
+      - "config.yaml"
+      - "scripts/**"
+      - "templates/**"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 拉所有历史，build.py 可能读 git log
+          lfs: true       # 拉 LFS 真实 mp3（否则 output/series/**/*.mp3 是 pointer）
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install ffmpeg + dependencies
+        # M1 暴露的真实 bug：CI 之前一直靠"所有集命中 manifest 跳过"掩盖 ffprobe 缺失；
+        # 重构加 exit code 契约后立刻翻车——新增一集即 FileNotFoundError。
+        # ubuntu-latest 不保证自带 ffmpeg，必须显式装。
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          # 启动期探测：ffmpeg / ffprobe 都得在
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+
+      - name: Unit tests (守护 LLM 链路 + 命名 hard gate)
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Render index + feed (use existing mp3, no TTS)
+        # CI 走 --skip-audio 模式：mp3 资产随 git 走（output/ 入 git）；
+        # 仅重新渲染 shownotes / RSS / index.html。
+        # build.py 在 is_dir() 时递归收集 drafts/**/ep-*.md，一次跑完全部 series。
+        env:
+          # 不设 MINIMAX_API_KEY：edge-tts backend 不需要 key
+          TTS_BACKEND: edge-tts
+        run: |
+          python -m src.build drafts/ --skip-audio --log-level INFO
+
+      - name: Deploy output/ to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output
+          publish_branch: gh-pages
+          force_orphan: true
+          # LFS 关键：把 .gitattributes 一起推到 gh-pages，
+          # GitHub Pages 才能识别 *.mp3 是 LFS 文件并从 media URL 出真实音频，
+          # 而不是把 131 字节的 LFS pointer 当 mp3 服务。
+          lfs: true
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
