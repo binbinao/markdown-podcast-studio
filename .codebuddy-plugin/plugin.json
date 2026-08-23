@@ -6,6 +6,11 @@
     "name": "纪多斌",
     "email": "duobin.ji@example.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/binbinao/markdown-podcast-studio.git"
+  },
+  "homepage": "https://github.com/binbinao/markdown-podcast-studio",
   "agents": [
     "./agents/markdown-podcast-studio-team-lead.md",
     "./agents/script-editor.md",
