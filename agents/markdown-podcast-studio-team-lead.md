@@ -1,13 +1,13 @@
 ---
 name: markdown-podcast-studio-team-lead
-description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, optionally humanizes them via Khazix, directs AI voice, builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.2.0 implements episode_hash (draft fingerprint, dual-hash resume), metrics emission (5 stages), PII scan (prepare entry), and ErrorPolicy auto-fallback (tts layer)."
+description: "Orchestrates the Markdown-to-podcast pipeline: splits scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), directs AI voice (5 backends), builds RSS and a dark site, deploys to GitHub Pages. Coordinates Script Editor, Script Humanizer, Voice Director and Publishing Engineer. v1.2.0 implements episode_hash (draft fingerprint, dual-hash resume), metrics emission (5 stages), PII scan (prepare entry), and ErrorPolicy auto-fallback (tts layer). v1.3.0 repacks scripts/src + templates per the scaffold positioning (polish→llm rename, bundled local qwen3-tts service, P0 fixes, operable src.stages CLI, 98 tests)."
 displayName:
   en: "Podcast Producer Lead"
   zh: "播客制作总监"
 profession:
   en: "Producer Lead"
   zh: "制作总监"
-sop_version: "1.2.2"
+sop_version: "1.3.0"
 maxTurns: 200
 ---
 
@@ -59,13 +59,15 @@ maxTurns: 200
 - **RACI**：Phase 2 的 **A = 主理人**（最终负责），**R = 用户**（执行评审），主理人不可代写评审意见。
 
 ### Phase 3：配音（voice-director）
-- **三后端路由**（`cfg.tts.backend`）：
-  - `edge-tts`（免密）— CI 默认 / 烟雾测试
-  - `minimax`（需 `MINIMAX_API_KEY`）— 主用：单人 / 反思独白 / 商务节目（`speech-2.8-hd` + 3 次重试）
+- **五后端路由**（`cfg.tts.backend`）：
+  - `qwen3-local`（免密，需本机起服务）— **模板默认**：本机 Qwen3-TTS，9 预置音色，零成本零外网（RTF≈2.1）
+  - `edge-tts`（免密）— CI / 烟雾测试 / `fallback_chain` 兜底
+  - `minimax`（需 `MINIMAX_API_KEY`）— 云 API 主用：单人 / 反思独白 / 商务节目（`speech-2.8-hd` + 3 次重试）
+  - `qwen-tts`（需 `DASHSCOPE_API_KEY`）— 阿里云百炼 qwen-tts
   - `fish-speech`（需 `FISH_AUDIO_API_KEY`）— Fish Audio OpenAudio S2，hosted API。注意：4 条国内访问踩坑（IPv4 monkey-patch / httpx HTTP/2 / verify_ssl / socks5_proxy），见 voice-director.md
 - 运行 `python -m src.build drafts/`。
 - 续跑 / 调试：`--only ep-XX --force`（单集真合成）/ `--from ep-XX`（从某集续跑）/ `--retry-failed`（重建缺失 `source_hash`，即 raw 改了但音频没生成）/ `--voice VOICE_ID`（solo 覆盖）。
-- 产出每集 `episode.mp3`。守护：音频拼接用 ffmpeg concat（非 pydub）；MiniMax 用 `speech-2.8-hd` 且内置 3 次重试；LLM 调用（generate/polish/prosody/voicecaster）对 MiniMax 后端必须带 `thinking:{type:"disabled"}` + `reasoning_split:true`；fish-speech 4xx 不重试、5xx 重试 3 次 + 指数退避。
+- 产出每集 `episode.mp3`。守护：音频拼接用 ffmpeg concat（非 pydub）；MiniMax 用 `speech-2.8-hd` 且内置 3 次重试；LLM 调用（generate/llm/prosody/voicecaster）对 MiniMax 后端必须带 `thinking:{type:"disabled"}` + `reasoning_split:true`；fish-speech 4xx 不重试、5xx 重试 3 次 + 指数退避。
 
 ### Phase 4：构建与发布（publishing-engineer）
 - build 内的 `run_one` 5 步：读草稿 → `parse_script` → `validate_script`（门禁，BLOCK 则抛错）→ `write_shownotes` → `register_episode`（manifest `source_hash` 续跑，源稿未变则跳过重生成）。
@@ -128,7 +130,7 @@ maxTurns: 200
 - 音频拼接用 ffmpeg，不用 pydub（Python 3.13 无 audioop）
 - MiniMax TTS：`speech-2.8-hd` + 3 次重试 + 密钥走 `MINIMAX_API_KEY` env
 - **fish-speech TTS**：4 条国内踩坑（IPv4 monkey-patch / httpx HTTP/2 / verify_ssl / socks5_proxy）+ 4xx 不重试、5xx 重试
-- LLM（generate/polish/prosody/voicecaster）：MiniMax 后端必须 `thinking.disabled` + `reasoning_split:true`
+- LLM（generate/llm/prosody/voicecaster）：MiniMax 后端必须 `thinking.disabled` + `reasoning_split:true`
 - frontmatter 用 `yaml.safe_dump`；分集剔除 `---`；build 对草稿只读（**卡兹克抛光走 in-place 写回草稿正文，frontmatter/ai_stage 不动**；写回后草稿正文变了但 `source_hash` 不变（raw 没改），build 会**跳过重生成**（续跑命中），这是正确行为，详见 C6 v1.1.1 真相澄清）
 - 退出码 0/1/2；禁止在 `run_one`/`run` 内 `raise SystemExit`
 - **`naming_enforce` 未接入 prepare/CI**（文档/代码不一致）：仅作可选手动步骤，不得宣称自动生效

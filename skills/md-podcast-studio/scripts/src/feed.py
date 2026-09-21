@@ -201,7 +201,8 @@ def register_episode(
     """注册一集到 manifest。已存在则保留原 date（首次 build 写入的日期）。
 
     slug = series_slug（用于构建 output/series/<slug>/ep-XX/episode.mp3 URL）。
-    body：草稿正文（不含 frontmatter），用于算 episode_hash（v1.2.0 引入）。
+    body：草稿正文（不含 frontmatter），用于算 episode_hash。少了它，
+    「改了草稿正文但没改 source 文章」不会被断点续传判据发现 → 不会重渲。
     """
     data = load_manifest(out_dir)
     eps = data["episodes"]
@@ -212,7 +213,9 @@ def register_episode(
     old = next((e for e in eps if e.get("_key") == key), None)
     today = date.today().isoformat()
     src_hash = _hash_source(meta.get("source", ""))
-    # episode_hash（v1.2.0 引入）：草稿正文（不含 frontmatter）的指纹
+    # 草稿指纹：正文（不含 frontmatter）的 hash。与 source_hash 互补——
+    # source_hash 只管「raw 文章改没改」，episode_hash 管「草稿正文改没改」
+    # （卡兹克写回、人工改字都应触发重渲）。
     from .episode_hash import episode_hash_of
     ep_hash = episode_hash_of(meta, body)
     # source hash 变化：raw 文章改了，但音频没重生成 → warn
@@ -624,6 +627,18 @@ def build_index(out_dir: Path, podcast: dict[str, Any]) -> Path:
     about_html = _about_html(title, tagline, about_text, groups, episodes, author, language)
     subscribe_html = _subscribe_html(_ICON_LIB, base) if subscribe_enabled else ""
 
+    # ---- 站点统计(analytics)----
+    # 默认 disabled;enabled + code 都齐才拉 GC,失败 widget 隐身
+    # 放在 render 前是为了不让 GC 网络阻塞 build 主体计算
+    analytics_cfg = podcast.get("analytics", {}) or {}
+    stats: dict[str, int] | None = None
+    if analytics_cfg.get("enabled") and analytics_cfg.get("code"):
+        from .analytics import fetch_stats
+        stats = fetch_stats(
+            analytics_cfg["code"],
+            analytics_cfg.get("api_key", ""),
+        )
+
     # 注入 player.js（构建期替换占位符）
     player_js = (Path(__file__).resolve().parent.parent / "templates" / "player.js").read_text(encoding="utf-8")
     feed_js = (Path(__file__).resolve().parent.parent / "templates" / "feed.js").read_text(encoding="utf-8")
@@ -652,6 +667,8 @@ def build_index(out_dir: Path, podcast: dict[str, Any]) -> Path:
         latest=latest_ctx,
         player_js=player_js,
         feed_js=feed_js,
+        analytics=analytics_cfg,
+        stats=stats,
     )
     path = out_dir / "index.html"
     path.write_text(html, encoding="utf-8")

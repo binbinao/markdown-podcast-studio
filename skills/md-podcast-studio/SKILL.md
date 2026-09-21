@@ -1,19 +1,22 @@
 ---
 # === SOP 元数据（流程治理） ===
 name: md-podcast-studio
-version: 1.2.2
+version: 1.3.0
 owner: script-editor                       # SOP 修改权限归属（PR 评审需 owner + 主理人 + 用户）
 effective_from: 2026-09-21
 changelog_ref: ../../../CHANGELOG.md      # 变更日志相对路径
-supersedes: v1.2.1
-description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.2 is a DOCS-ONLY update distilled from a real end-to-end release: new hard-constraint C12 (--force is a one-shot diagnostic and must be reverted), release-acceptance rules (new episode must be manifest/RSS item #1; verify the gh-pages BLOB, not HTTP; index.html is a JS shell and is not a valid probe), and a corrected C3 max_tokens guidance for reasoning models."
+supersedes: v1.2.2
+description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), direct AI voice (5 backends incl. bundled local qwen3-local / MiniMax / edge-tts / qwen-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.3.0 repacks scripts/src + templates per the scaffold positioning: merges the real-project evolution (polish→llm rename, +analytics, 2 new TTS backends, edge.py fix) with this package's SOP hardening (Khazix gate, dual-hash resume, ErrorPolicy fallback); bundles the local qwen3-tts service; fixes the P0 where scaffolded projects crashed on build due to 4 missing template assets; makes the Khazix gate operable via a real src.stages CLI; default TTS backend is now qwen3-local; 98 unit tests."
 ---
 
-# Markdown Podcast Studio — Skill (v1.2.2)
+# Markdown Podcast Studio — Skill (v1.3.0)
 
 把 Markdown 文章变成可上线播客的完整、可移植流水线。本 skill 自带**已验证可用**的流水线代码与工程模板，能在任意新仓库 scaffold 出一套 Markdown→播客工程。
 
-> **v1.2.1 变更驱动**：v1.2.0 已实现 episode_hash / metrics / PII / ErrorPolicy fallback；v1.2.1 **将卡兹克从可选升级为必做强阻断**（hard-constraint C11），并补齐 v1.2.1 候选清单（llm_verify / phase5_summary / ErrorPolicy 标准化 / unit test）。详见 `CHANGELOG.md`。回滚方式见文末。
+> **v1.3.0 变更驱动**：本包定位是**脚手架**——`bin/scaffold` 把 `scripts/src/` 原样复制进新工程，
+> 所以包内 `src/` 必须是**当前最佳实践、可开箱跑通**的版本。1.3.0 把真实运行仓库的工程演进与本包的 SOP 加固
+> **三方合并**，补齐 3 个 P0（模板资产缺失 / 门禁无 CLI / 守护测试缺失），并**内置本地 TTS 服务**。
+> 详见 `CHANGELOG.md`。回滚方式见文末。
 
 ---
 
@@ -24,9 +27,13 @@ description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh proj
 - 用户原话提到"更自然 / 更生动 / 像人念的 / 活人感 / 卡兹克" → 触发 **Phase 1.5**（见决策矩阵）。
 
 ## 目录布局（本 skill 内）
-- `scripts/src/` — 流水线代码（= 已验证的 myPodcast `src/`，**原样打包，不修改逻辑；冻结资产**）
-- `templates/` — 可移植工程模板：`config.yaml`、`pyproject.toml`、`requirements.txt`/`requirements.lock`、`site/`（Jinja2 暗色站点）、`github/workflows/publish.yml`（gh-pages 部署）
+- `scripts/src/` — 流水线代码（**脚手架资产**：`bin/scaffold` 会原样复制进新工程，故此处即"当前最佳实践版本"）
+- `templates/` — 可移植工程模板：`config.yaml`、`pyproject.toml`、`requirements.txt`/`requirements.lock`、
+  `player.js` / `feed.js` / `style.css` / `design-tokens.json`（构建必需，缺一即 crash）、
+  `site/`（Jinja2 暗色站点）、`scripts/qwen3-tts-local/` + `scripts/start-qwen-tts-local.sh`（**内置本地 TTS 服务**）、
+  `github/workflows/publish.yml`（gh-pages 部署）
 - `bin/scaffold` — 在新目录实例化整套工程
+- `tests/` — 守护测试（98 个），见 `test_scaffold_contract.py`
 - `references/`
   - `command-reference.md` — 精确 CLI 调用（prepare / build / 全序列）
   - `config-spec.md` — `config.yaml` 字段规范（含 v1.1.0 新增 `humanize_stage` / `audio_reviewed`；v1.1.1 撤销 v1.1.0 误诊的 `episode_hash` 字段定义）
@@ -48,21 +55,27 @@ pip install -r requirements.lock
 
 # 3. 放文章 → 准备草稿 → 人工评审 → 合成与发布
 cp article.md raw/$(date +%Y-%m-%d)-article.md
-export MINIMAX_API_KEY=...          # minimax 后端需要；edge-tts 免密；fish-speech 用 FISH_AUDIO_API_KEY
+export MINIMAX_API_KEY=...          # minimax 后端需要；edge-tts / qwen3-local 免密
 python -m src.prepare --yes
-python -m src.prepare --mark-reviewed drafts/<date-slug>
+python -m src.prepare --mark-reviewed drafts/<date-slug>          # Phase 2 审稿
+python -m src.stages mark-humanize-reviewed drafts/<date-slug>/ep-01.md   # C11 卡兹克门禁放行
 python -m src.build drafts/
 git add output drafts && git commit -m "new episodes" && git push  # 部署 gh-pages
 ```
 
-### 三 TTS 后端速选（详细见决策矩阵 §D4）
+### 五 TTS 后端速选（详细见决策矩阵 §D4）
 | 后端 | 密钥 | 何时用 |
 |---|---|---|
-| `edge-tts` | 无 | 烟雾测试 / CI 默认（`TTS_BACKEND=edge-tts`） |
-| `minimax` | `MINIMAX_API_KEY` | 主用：单人 / 反思独白 / 商务节目（8 种情绪 + 22 拟声词） |
-| `fish-speech` | `FISH_AUDIO_API_KEY` | Fish Audio OpenAudio S2，hosted API；国内访问有 4 坑（见 hard-constraints C9） |
+| `qwen3-local` | 无（需本机起服务） | **模板默认**：本机 Qwen3-TTS，9 预置音色，零成本、零外网依赖（RTF≈2.1）|
+| `edge-tts` | 无 | 烟雾测试 / CI / 兜底（`fallback_chain` 默认项）|
+| `minimax` | `MINIMAX_API_KEY` | 云 API 主用：单人 / 反思独白 / 商务节目（8 种情绪 + 22 拟声词；voicecaster 仅对此后端生效）|
+| `qwen-tts` | `DASHSCOPE_API_KEY` | 阿里云百炼 qwen-tts（云端，无需本机 GPU）|
+| `fish-speech` | `FISH_AUDIO_API_KEY` | Fish Audio OpenAudio S2，hosted API；国内访问有 4 坑（见 hard-constraints C9）|
 
-切换**只改 `config.yaml` 的 `tts.backend`**，不改业务代码。
+切换**只改 `config.yaml` 的 `tts.backend`**，不改业务代码。`qwen3-local` 用前需先起服务：
+```bash
+./scripts/start-qwen-tts-local.sh          # → 127.0.0.1:8100；--stop / --status / --fg
+```
 
 ---
 
@@ -147,12 +160,14 @@ flowchart TD
 - **兜底**：卡兹克改稿后 `humanize_stage` 未到 `reviewed` → 不进 Phase 3（ErrorPolicy: `STOP_AND_NOTIFY`）
 
 ### D4 — Phase 3 TTS 后端选择
-- **默认走 `config.yaml`** 的 `tts.backend`
+- **默认走 `config.yaml`** 的 `tts.backend`（模板默认为 `qwen3-local`）
 - **决策树**（用户没说时主理人按此推荐）：
+ - 无外网 / 零成本 / 隐私敏感 → `qwen3-local`（本机服务，需先起 `scripts/start-qwen-tts-local.sh`；RTF≈2.1）
  - 烟雾测试 / CI → `edge-tts`（免密，最稳）
  - 单人 / 反思独白 / 商务节目 → `minimax`（8 情绪 + 22 拟声词）
  - 双人对谈 / 多情感切换 → `minimax`（更稳定）或 `fish-speech`（音色丰富但有 4 坑）
- - 国内 CI 网络受限 → `edge-tts` 优先（minimax/fish 都走外网）
+ - 想用云 API 但不用 MiniMax → `qwen-tts`（阿里云百炼，需 `DASHSCOPE_API_KEY`）
+ - 国内 CI 网络受限 → `edge-tts` / `qwen3-local` 优先（minimax/fish/qwen-tts 都走外网）
 - **兜底**：主后端 5xx 连续 3 次 → 自动切 `edge-tts`（ErrorPolicy: `FALLBACK_BACKEND`）
 
 ### D5 — Phase 4 部署路径
@@ -229,6 +244,8 @@ git checkout v1.0.0 -- .
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
 ```
 
+> **v1.2.2 → v1.2.1-patch**：去掉真实上线沉淀的文档层修正（C12 + 发布验收铁律 + C3 max_tokens 纠正）。`git checkout v1.2.1-patch -- .`。
+> **v1.3.0 → v1.2.2**：回滚"脚手架重打包"（`src/` 三方合并 + `templates/` 补齐 + 内置本地 TTS + 98 测试）。`git checkout v1.2.2 -- .`。
 > **v1.1.1 → v1.1.0**：把 v1.1.1 误诊的 episode_hash 改名回滚，回 source_hash 真相。`git checkout v1.1.0 -- .`。
 > **v1.2.0 → v1.1.1**：把 src/ 实际改造回滚，文档层回归"建议"状态。`git checkout v1.1.1 -- .`。
 
@@ -295,7 +312,8 @@ cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-p
 rsync -a --delete .archive/v1.0.0/ ./
 ```
 
-> 详细命令、配置、约束与排错见 `references/`。**代码是冻结资产**：本 skill 只复制、不修改流水线逻辑；仓库后续演进需重新打包。
+> 详细命令、配置、约束与排错见 `references/`。**`scripts/src/` 是脚手架资产**（v1.3.0 起口径）：
+> `bin/scaffold` 把它原样复制进新工程，所以此处就是"当前最佳实践版本"；包自身演进时随版本一起更新即可，不再需要单独"重新打包"动作。
 ---
 
 ## v1.2.1 治理层新增（卡兹克必做 + 4 候选落地）
@@ -314,7 +332,7 @@ rsync -a --delete .archive/v1.0.0/ ./
 ### pii_scan.llm_verify 接线（中文姓名识别）
 - **触发条件**：`cfg.pii.llm_verify: true`（默认关闭）
 - **设计**：启发式找"上下文疑似姓名"（CEO X / X 先生 / 老师 X 等）→ 调 LLM 二次校验 → 确认的姓名脱敏为 `[已脱敏姓名]`
-- **复用**：`polish.llm_complete()`（已有 LLM helper）
+- **复用**：`llm.llm_complete()`（已有 LLM helper；v1.3.0 起由 `polish.py` 改名而来）
 - **失败 fallback**：LLM 调用失败 → 正则-only（不阻塞 prepare/build）
 - **Trade-off**：边界严格（lookbehind 排除"汉字+姓名"），宁可漏几个，不要误杀
 
@@ -358,8 +376,8 @@ rsync -a --delete .archive/v1.0.0/ ./
 
 ## v1.2.2 治理层新增（**文档层**，来自一次真实上线）
 
-> 本版**不改代码**（`scripts/src/` 仍为 v1.2.1 快照）。它是用本专家包真实上线一集播客后，
-> 把「会把人带偏」的三处认知修正沉淀进文档。
+> 本版**不改代码**（`scripts/src/` 当时仍为 v1.2.1 快照；**该限制已在 v1.3.0 解除**）。
+> 它是用本专家包真实上线一集播客后，把「会把人带偏」的三处认知修正沉淀进文档。
 
 ### 1. `--force` 是一次性诊断，不是终态（hard-constraints **C12**）
 - `--force` 让**全部**集数重走 `register_episode()`，而它结尾是 `eps.insert(0, entry)` → 于是：
@@ -386,7 +404,38 @@ rsync -a --delete .archive/v1.0.0/ ./
 快捷分支丢 duo 音色（**静默降级**，不报错）/ 长任务在 teammate 会话被 SIGKILL /
 stdout 块缓冲导致"假卡死"（判活要用服务计数器）/ 整轨静音的检出（`ffmpeg -af volumedetect`）。
 
-### ⚠️ 已知漂移（待决策）
-本包 `scripts/src/` 与真实运行仓库**已分叉**（本包独有 `episode_hash/metrics/pii_scan/error_policy`，
-真实仓库独有 `llm.py/analytics.py`，且 `build.py`/`stages.py`/`tts.py` 内容不同）。
-⇒ 从本包 scaffold 出的新工程**不会**包含这些演进。**重新打包需单独评估**（详见 `CHANGELOG.md [1.2.2]`）。
+### ✅ 已知漂移（**v1.3.0 已消除**）
+v1.2.2 记录的「本包 `scripts/src/` 与真实运行仓库分叉」在 **v1.3.0 已解决**（三方合并 + 补齐 P0 + 内置本地 TTS）。
+
+---
+
+## v1.3.0 脚手架重打包（**代码 + 模板层**）
+
+> **一句话**：让 `bin/scaffold` 出的新工程**开箱即能跑到上线**，而不是复制一份旧快照。
+> 详见 `CHANGELOG.md [1.3.0]`。
+
+### 1. 三方合并：真实仓库演进 ⊕ 本包 SOP 加固
+- **真实仓库侧**：`polish.py` → **`llm.py`** 改名（`pii_scan.py` 4 处引用同步）；新增 **`analytics.py`**；
+  TTS 后端 **3 → 5**（新增 `qwen_tts.py` 云 API、`qwen3_local.py` 本机服务；`edge.py` 修"句末弯引号切独立句→空音频"）。
+- **本包侧保留**：`episode_hash.py` / `error_policy.py` / `metrics.py` / `pii_scan.py` + C11 门禁 + 双 hash 续跑
+  + `build_episode_with_fallback` + `emit_phase1/3/5`。
+- ⚠️ **改名陷阱**：守护测试必须**同时断言 `polish` 与 `llm` 两个名字 + AST 级 Call 节点**，
+  否则改名后"没人再引用 `polish`"会让旧断言静默通过。
+
+### 2. 修掉的 3 个 P0
+| P0 | 现象 | 修法 |
+|---|---|---|
+| 模板资产缺失 | scaffold 出的工程一 build 就 `FileNotFoundError`（缺 `player.js`/`feed.js`/`style.css`/`design-tokens.json`） | 补齐 4 个资产 + `bin/scaffold` 复制 |
+| 门禁无 CLI | 文档要求 `python -m src.stages mark-humanize-reviewed`，但 `stages.py` 没有 `main()` → 门禁不可操作 | 补 `main()` + `mark-reviewed`/`mark-humanize-reviewed`/`show` |
+| 守护测试缺失 | 文档引用的 `TestBuildReadOnlyContract` 不存在 | 实现（AST 扫描 `llm`/`polish` 的 import 与 Call） |
+
+### 3. 内置本地 TTS（`templates/scripts/qwen3-tts-local/`）
+`server.py` / `synth.py` / `probe_device.py` / `cli.py` / `run.sh` + `start-qwen-tts-local.sh`（`--stop`/`--status`/`--fg`）。
+模型权重与独立 venv 不打包，用 `QWEN_TTS_MODEL_PATH` / `QWEN_TTS_VENV` 覆盖。
+`templates/config.yaml` 默认后端随之改为 **`qwen3-local`**。
+
+### 4. 验收证据
+- **98/98 单测**通过（原 57 + `test_scaffold_contract.py`）。
+- **全新 scaffold → 真实构建跑通**：C11 拦截 skeleton → `mark-humanize-reviewed` → build → **edge-tts 真实合成 11s mp3**
+  → manifest 双 hash → **再跑 build 幂等（0 变化）**。
+- **注入探针**：移走 `templates/player.js` → 对应测试变红 → 还原恢复绿（证明守护测试真的有效）。

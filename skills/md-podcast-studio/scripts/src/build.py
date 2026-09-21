@@ -16,11 +16,18 @@ from typing import Any
 
 import yaml
 
+from .error_policy import stop_and_notify
 from .feed import build_feed, build_index, register_episode, write_shownotes
 from .log import logger as log
 from .ingest import parse_script, slugify
-from .stages import stage_of, stage_warning
-from .tts import build_episode_audio, build_episode_with_fallback
+from .stages import (
+    humanize_stage_of,
+    humanize_stage_warning,
+    is_humanize_approved,
+    stage_of,
+    stage_warning,
+)
+from .tts import build_episode_with_fallback
 from .voicecaster import cast as vc_cast
 
 
@@ -34,7 +41,7 @@ def run_one(
 ) -> None:
     raw = Path(episode_path).read_text(encoding="utf-8")
 
-    # draft 只读契约：build 不再跑 polish() 二次 LLM 改写。
+    # draft 只读契约：build 不再对草稿做二次 LLM 改写。
     # 重构前 `polished = polish(raw, cfg)` 会把 drafts/ 里的人工修改喂给 LLM 重写一遍
     # → 人工改动被吃、LLM 成本翻倍、同一 draft 每次 build 输出不同（不可复现）。
     # 现在正文逐字节来自 draft；stage 只决定告警等级（src/stages.py）。
@@ -45,20 +52,19 @@ def run_one(
     warn = stage_warning(stage_of(meta))
     if warn:
         log.warning(f"      ⚠ {warn}")
-    # v1.2.1：卡兹克必做强阻断（hard-constraint C11）
-    # humanize_stage ∈ {reviewed, frozen} 才允许 build；否则 PipelineError 抛错。
-    # --skip-humanize 豁免（CI / 烟雾测试 / 用户显式跳过）
+
+    # 卡兹克必做强阻断（hard-constraint C11）：humanize_stage ∈ {reviewed, frozen}
+    # 才允许 build，否则 PipelineError 抛错。`--skip-humanize` 是唯一豁免口，
+    # 只给 CI / 烟雾测试用；正常制作流程请走 `src.stages mark-humanize-reviewed`。
     if not skip_humanize:
-        from .stages import humanize_stage_of, humanize_stage_warning, is_humanize_approved
-        from .error_policy import stop_and_notify
         h_stage = humanize_stage_of(meta)
         if not is_humanize_approved(h_stage):
-            warn_h = humanize_stage_warning(h_stage)
             stop_and_notify(
                 "phase1.5",
-                f"卡兹克活人感抛光未完成（humanize_stage={h_stage or '(missing)'}）：{warn_h}",
+                f"卡兹克活人感抛光未完成（humanize_stage={h_stage or '(missing)'}）："
+                f"{humanize_stage_warning(h_stage)}",
                 hint=(
-                    "v1.2.1 起卡兹克必做（hard-constraint C11）：先调度 script-humanizer 改稿，"
+                    "卡兹克必做（hard-constraint C11）：先调度 script-humanizer 改稿，"
                     "再跑 `python -m src.stages mark-humanize-reviewed <path>`。"
                     " CI / 烟雾测试用 `--skip-humanize` 豁免。"
                 ),
@@ -66,6 +72,7 @@ def run_one(
         log.info(f"      ✓ 卡兹克门禁通过 (humanize_stage={h_stage})")
     else:
         log.warning("      ⚠ --skip-humanize: 卡兹克门禁豁免（仅 CI/烟雾测试用）")
+
     if not segments:
         raise PipelineError(
             "没有可朗读的内容，检查脚本格式或 frontmatter。",
@@ -93,32 +100,70 @@ def run_one(
 
     backend = cfg.get("tts", {}).get("backend", "edge-tts").lower()
     log.info(f"[3/5] 生成音频 (backend={backend})")
-    voice_key = "voices_minimax" if backend == "minimax" else "voices"
+    if backend == "minimax":
+        voice_key = "voices_minimax"
+    elif backend == "fish-speech":
+        voice_key = "voices_fishspeech"
+    elif backend == "qwen-tts":
+        voice_key = "voices_qwentts"
+    elif backend == "qwen3-local":
+        voice_key = "voices_qwen3local"
+    else:
+        voice_key = "voices"
     voice_map = dict(cfg.get(voice_key, {}))  # 拷贝，避免改全局配置
 
-    # 音色选型：仅 minimax backend 用 voicecaster；duo 节目保留 host/guest 映射
+    # 音色选型：仅 minimax backend 用 voicecaster（Fish Audio voice ID 是平台分配的，
+    # voicecaster 词典是 minimax 专用的）；duo 节目保留 host/guest 映射
     fmt = str(meta.get("format", "")).lower()
-    if backend == "minimax" and fmt != "duo":
+    if backend in ("minimax", "qwen-tts", "qwen3-local") and fmt != "duo":
         # 优先级：CLI --voice > frontmatter voice > voicecaster 自动
+        # qwen-tts / qwen3-local 的 voicecaster 词典是 minimax 专用，跳过自动选型，
+        # 直接用 frontmatter voice / voices_<backend>.default
         explicit = voice_override or meta.get("voice")
-        source_rel = meta.get("source")
-        article_text = raw
-        if source_rel:
-            src_path = Path(source_rel)
-            if src_path.exists():
-                article_text = src_path.read_text(encoding="utf-8")
-        chosen = vc_cast(article_text, cfg, explicit=explicit)
-        voice_map["default"] = chosen
-        if voice_override:
-            log.info(f"      voice CLI 覆盖 → {voice_override}")
+        if backend in ("qwen-tts", "qwen3-local"):
+            # Qwen3-TTS 音色名是英文（qwen-tts 云：Ethan/Cherry/…；
+            # qwen3-local 本机：Vivian/Serena/Uncle_Fu/…），frontmatter 的
+            # minimax 音色 ID（male-qn-jingying / audiobook_male_1）不适用。
+            # 仅接受「显式指定」或「看起来不是 minimax ID」的值。
+            if voice_override:
+                voice_map["default"] = voice_override
+                log.info(f"      voice CLI 覆盖 → {voice_override}")
+            elif meta.get("voice") and not str(meta.get("voice")).startswith(
+                    ("male-", "female-", "audiobook_")):
+                voice_map["default"] = meta.get("voice")
+                log.info(f"      frontmatter voice → {meta.get('voice')}")
+            else:
+                log.info(f"      {backend} default voice → {voice_map.get('default')}")
         else:
-            log.info(f"      voicecaster → {chosen}")
-    elif backend == "minimax" and fmt == "duo":
+            source_rel = meta.get("source")
+            article_text = raw
+            if source_rel:
+                src_path = Path(source_rel)
+                if src_path.exists():
+                    article_text = src_path.read_text(encoding="utf-8")
+            chosen = vc_cast(article_text, cfg, explicit=explicit)
+            voice_map["default"] = chosen
+            if voice_override:
+                log.info(f"      voice CLI 覆盖 → {voice_override}")
+            else:
+                log.info(f"      voicecaster → {chosen}")
+    elif backend in ("minimax", "fish-speech", "qwen-tts", "qwen3-local") and fmt == "duo":
         # duo 节目：尊重 frontmatter host_voice / guest_voice；都缺再回退到
-        # voices_minimax 的 host/guest 配置。CLI --voice 在 duo 模式下不适用
+        # voices_<backend> 的 host/guest 配置。CLI --voice 在 duo 模式下不适用
         # （需要分别覆盖两个音色，应走 frontmatter 而不是 CLI 单值）。
         host_v = meta.get("host_voice") or voice_map.get("host")
         guest_v = meta.get("guest_voice") or voice_map.get("guest")
+        # qwen3-local：历史稿件的 frontmatter 存的是 minimax 音色 ID（audiobook_male_1 /
+        # female-chengshu），本机音色表里没有。此时忽略 frontmatter，回退到
+        # voices_qwen3local 的 host/guest，而不是直接报错——保证已有稿件零改动可跑。
+        if backend == "qwen3-local":
+            from .backends.qwen3_local import SPEAKERS as _LOCAL_SPEAKERS
+            if host_v and host_v not in _LOCAL_SPEAKERS:
+                log.info(f"      host_voice={host_v!r} 非本机音色，回退 {voice_map.get('host')}")
+                host_v = voice_map.get("host")
+            if guest_v and guest_v not in _LOCAL_SPEAKERS:
+                log.info(f"      guest_voice={guest_v!r} 非本机音色，回退 {voice_map.get('guest')}")
+                guest_v = voice_map.get("guest")
         if host_v:
             voice_map["host"] = host_v
         if guest_v:
@@ -145,9 +190,10 @@ def run_one(
         size = mp3.stat().st_size
         log.info(f"      → (skip) {mp3}  ({duration // 60}分{duration % 60}秒, {size // 1024}KB)")
     else:
-        # v1.2.0：走带 fallback 的版本，采集 ErrorPolicy metrics
+        # 走带 fallback 的版本（ErrorPolicy：主 backend 失败自动切备用），并采集 metrics
         mp3, duration, tts_metrics = build_episode_with_fallback(
-            segments, voice_map, cfg, out_dir, title,
+            segments, voice_map, cfg, out_dir,
+            title=title,
             series_title=series_title_v,
             series_slug=series_slug,
             ep_index=ep_index,
@@ -155,13 +201,13 @@ def run_one(
         ep_dir = mp3.parent
         size = mp3.stat().st_size
         log.info(f"      → {mp3}  ({duration // 60}分{duration % 60}秒, {size // 1024}KB)")
-        # v1.2.0：emit_phase3 metrics（每集）
+        # emit_phase3 metrics（每集），best-effort
         try:
             from .metrics import emit_phase3
             emit_phase3(
                 out_dir,
                 episode_path=str(episode_path),
-                backend=tts_metrics.get("success_backend") or cfg.get("tts", {}).get("backend", "edge-tts"),
+                backend=tts_metrics.get("success_backend") or backend,
                 voice_id=str(voice_map.get("default", "")),
                 episodes_synthesized=1,
                 episodes_failed=0,
@@ -171,19 +217,55 @@ def run_one(
                 cost_estimate_usd=None,
                 duration_sec=0.0,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning(f"⚠ emit_phase3 失败（不影响 build）: {e}")
 
     log.info("[4/5] 写 shownotes")
     write_shownotes(ep_dir, meta, segments, duration)
 
     log.info("[5/5] 更新 RSS / 节目站")
     slug = meta.get("series_slug") or slugify(meta.get("series") or title)
-    # v1.2.0：传 body 让 register_episode 算 episode_hash
+    # 传 body：register_episode 用它算 episode_hash（草稿正文指纹）
     register_episode(out_dir, meta, slug, duration, size, body=body_text)
 
 
 SKIP_AUDIO = False
+
+
+def _is_unchanged(meta_pre: dict[str, Any], old: dict[str, Any], body_pre: str = "") -> bool:
+    """已注册的一集，内容指纹是否未变（决定断点续传能否跳过）。
+
+    两道指纹各管一段，都有才比对：
+
+    1. ``episode_hash`` —— 草稿正文（不含 frontmatter）的 hash，管「草稿正文改没改」
+       （卡兹克写回、人工改字都应触发重渲）。旧条目没这字段（legacy）则跳过这道。
+    2. ``source_hash`` —— raw 源文章的 hash，管「原文改没改」。
+
+    ⚠️ 历史上这里写成 ``if src_h and old.get("source_hash") == src_h``，要求指纹
+    **truthy**：于是**没有 ``source:`` 的稿子（早期 demo 稿）每次都被判为「已变」**，
+    每次 build 都重渲 —— manifest 的 ``updated``、条目顺序、feed.xml 每部署一次就变，
+    断点续传对它们彻底失效（2026-09-21 修复的真实缺陷）。
+
+    现在的规则：
+    - 两侧都有 episode_hash 且不等 → 已变
+    - 无 ``source:`` → 只认 episode_hash；两条都没有 → 视为未变（不重渲）
+    - 有 ``source:`` 但文件缺失 → 视为已变，不静默放过，让它重跑并在下游暴露问题
+    """
+    from .episode_hash import episode_hash_of
+    from .feed import _hash_source
+
+    new_ep = episode_hash_of(meta_pre, body_pre)
+    old_ep = old.get("episode_hash")
+    if new_ep and old_ep and new_ep != old_ep:
+        return False
+
+    src_field = str(meta_pre.get("source", "") or "")
+    if not src_field:
+        return True
+    src_h = _hash_source(src_field)
+    if not src_h:
+        return False
+    return old.get("source_hash") == src_h
 
 
 def _ffprobe_duration(mp3: Path) -> int:
@@ -205,9 +287,9 @@ def run(
     only: str | None = None,
     from_ep: str | None = None,
     retry_failed: bool = False,
-    skip_humanize: bool = False,
     force: bool = False,
     voice_override: str | None = None,
+    skip_humanize: bool = False,
 ) -> None:
     cfg = yaml.safe_load(Path(config_path).read_text(encoding="utf-8"))
     out_dir = Path(out_dir)
@@ -251,8 +333,8 @@ def run(
     n_run = 0
     for i, s in enumerate(scripts, 1):
         # 预解析 frontmatter 拿 series_slug + ep_index 算 _key
+        from .episode_hash import split_frontmatter
         from .ingest import parse_script
-        from .episode_hash import episode_hash_of, split_frontmatter
         raw_pre = s.read_text(encoding="utf-8")
         meta_pre, _ = parse_script(raw_pre)
         _, body_pre = split_frontmatter(raw_pre)
@@ -260,23 +342,9 @@ def run(
         ep_idx = int(meta_pre.get("episode", 1) or 1)
         key = f"{series_slug}::ep-{ep_idx:02d}"
 
-        # 断点续传：已成功且 hash 都未变 → 跳过（v1.2.0：双重 hash 比对）
+        # 断点续传：已成功且内容指纹未变 → 跳过
         if not force and not retry_failed and key in existing_keys:
-            old = existing_keys[key]
-            from .feed import _hash_source
-            src_h = _hash_source(meta_pre.get("source", ""))
-            ep_h = episode_hash_of(meta_pre, body_pre)
-            old_src = old.get("source_hash")
-            old_ep = old.get("episode_hash")
-            # v1.2.0 续跑规则（episode_hash.py:should_resynthesize）：
-            # - 缺任意 hash（legacy）→ 重生成
-            # - source_hash 变 → 重生成（raw 改了）
-            # - episode_hash 变 → 重生成（草稿正文改了）
-            # - 都未变 → 跳过
-            both_present = bool(src_h) and bool(ep_h) and bool(old_src) and bool(old_ep)
-            same_src = old_src == src_h
-            same_ep = old_ep == ep_h
-            if both_present and same_src and same_ep:
+            if _is_unchanged(meta_pre, existing_keys[key], body_pre):
                 # 检查 mp3 是否真存在
                 mp3 = out_dir / "series" / series_slug / f"ep-{ep_idx:02d}" / "episode.mp3"
                 if mp3.exists():
@@ -314,15 +382,11 @@ def run(
     log.info(f"  RSS : {feed}")
     log.info(f"  站点: {index}")
 
-    # v1.2.1：emit_phase5_summary 自动调用（端到端 cycle time + first_attempt_success）
+    # emit_phase5_summary（端到端 cycle time + first_attempt_success），best-effort
     try:
         from .metrics import emit_phase5_summary
-        # 收集 phase1-4 metrics 判断哪些 succeeded / degraded
-        from .metrics import read_phase as _read_phase
-        import time as _t
-        now = _t.time()
         phases_succeeded = ["phase0", "phase1", "phase3", "phase4"]
-        phases_degraded = []
+        phases_degraded: list[str] = []
         if skip_humanize:
             phases_degraded.append("phase1.5")
         else:
@@ -330,7 +394,8 @@ def run(
             phases_succeeded.append("phase2")
         emit_phase5_summary(
             out_dir,
-            cycle_time_hours=0.0,  # build 内不易估算全 cycle，用上次 phase1 时间戳推算
+            # build 内算不出完整 cycle（要从 phase1 时间戳往前推），不臆造数字
+            cycle_time_hours=0.0,
             user_review_time_hours=None,
             first_attempt_success=(not failed),
             phases_succeeded=phases_succeeded,
@@ -363,8 +428,8 @@ def main() -> None:
                     help="覆盖 frontmatter voice 字段，仅 solo 节目生效（duo 走 host/guest 映射）"
                          " 用于快速调音，不必重跑 prepare")
     ap.add_argument("--skip-humanize", action="store_true",
-                    help="v1.2.1 起新增：豁免卡兹克活人感抛光门禁（CI / 烟雾测试用，"
-                         "正常制作流程请勿使用；卡兹克强阻断由 hard-constraint C11 保证）")
+                    help="豁免卡兹克活人感抛光门禁（hard-constraint C11）。"
+                         "仅 CI / 烟雾测试用；正常制作流程请用 `python -m src.stages mark-humanize-reviewed`")
     args = ap.parse_args()
     configure(level=args.log_level, log_file=args.log_file)
     SKIP_AUDIO = args.skip_audio

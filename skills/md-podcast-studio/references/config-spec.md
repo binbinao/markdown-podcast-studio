@@ -44,7 +44,7 @@
 - `min_episode_chars`：`600`
 - `max_episode_chars`：`3000`
 
-## llm（generate/polish/prosody/voicecaster 共用）
+## llm（generate/llm/prosody/voicecaster 共用；v1.3.0 起由 `polish` 改名而来）
 - `enable`：`true`
 - `base_url`：`https://api.minimaxi.com/v1`
 - `api_key`：`""`（留空，走 env：`LLM_API_KEY` → `MINIMAX_API_KEY` → `OPENAI_API_KEY`）

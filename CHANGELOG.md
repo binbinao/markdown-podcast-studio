@@ -4,6 +4,81 @@
 
 ---
 
+## [1.3.0] — 2026-09-21 — 按「脚手架」定位重新打包 `src/` + `templates/`（**代码 + 模板层**）
+
+> **变更驱动**：用户要求"按『脚手架』定位把 `src/` 重新打包"。本包的定位是**脚手架**——
+> `bin/scaffold` 会把 `scripts/src/` **原样复制**进新工程，所以包内 `src/` 必须是**当前最佳实践、可开箱跑通**的版本，
+> 而不是 v1.2.1 的旧快照。本次把**真实运行仓库的工程演进**与**本包自己的 SOP 加固**双向合并，并修掉 3 个 P0。
+> **变更范围**：`scripts/src/`（全量重整）/ `templates/`（补齐缺失资产 + 内置本地 TTS）/ `bin/scaffold` /
+> `templates/config.yaml` / 新增 `tests/test_scaffold_contract.py`。
+> **回滚**：`git checkout v1.2.2 -- .`（回到"文档层"版本；注意 v1.2.2 的 `src/` 仍是 v1.2.1 快照）
+
+### 结论先行：漂移已消除
+
+v1.2.2 记录的「已知漂移」（本包 `src/` 与真实仓库分叉）在 1.3.0 **已解决**：两者不是冲突关系，
+而是**本包独有增量**（`episode_hash.py` / `error_policy.py` / `metrics.py` / `pii_scan.py`）与
+**真实仓库独有增量**（`llm.py` / `analytics.py` / 4 个新 backend）两组正交集合 —— 做三方合并即可，
+可直接覆盖的说法是错的（那会删掉本包自己的模块与单测）。
+
+### Fixed（P0 —— 脚手架开箱即崩）
+
+- **`templates/` 缺构建所需资产 → `scaffold` 出的新工程一 build 就 `FileNotFoundError`**：
+  `feed.py` 要读 `templates/player.js` / `feed.js` / `style.css`，`tokens.py` 要读 `templates/design-tokens.json`，
+  而这 4 个文件在包内**完全缺失**。→ 已全部补入，并在 `bin/scaffold` 中加入复制。
+  （定位方式：在 `/tmp` 全新 scaffold + 建最小 draft + build，复现崩溃后逐一定位。）
+- **`stages.py` 没有 CLI 入口**：文档（hard-constraints C6 / publishing-engineer）要求
+  `python -m src.stages mark-humanize-reviewed <path>`，但 `stages.py` 只有函数、**没有 `main()`**
+  → C11 门禁事实上**不可操作**。→ 已补 `main()` + `mark-reviewed` / `mark-humanize-reviewed` / `show` 三个子命令。
+- **`TestBuildReadOnlyContract` 在文档里被引用、测试却不存在** → 已实现（AST 级扫描，见下）。
+
+### Added（src/ 合并真实仓库演进）
+
+- **`polish.py` → `llm.py` 改名**（采用真实仓库口径），`pii_scan.py` 的 4 处引用一并改：
+  `polish.llm_complete()` → `llm.llm_complete()` / `from .polish import` → `from .llm import`。
+  ⚠️ **改名陷阱（已写入守护测试）**：只断言 `polish` 这个名字会**静默通过**（改名后已无人引用它）→
+  守护测试必须**同时覆盖 `polish` 与 `llm` 两个名字 + AST 级 Call 节点检查**，否则改名后测试依然全绿。
+- **新增 `analytics.py`**（真实仓库既有模块）。
+- **TTS 后端 3 → 5**：新增 `backends/qwen_tts.py`（qwen-tts 云 API）与 `backends/qwen3_local.py`
+  （本机 Qwen3-TTS 服务，OpenAI 兼容 `POST /v1/audio/speech`）；`backends/edge.py` 同步真实仓库修复
+  （句末句号后的闭合弯引号被切成独立句 → 空音频：净化文本 + 破折号归一为逗号 + 重试 5 次带退避）。
+- **内置本地 TTS 服务 `templates/scripts/qwen3-tts-local/`**：`server.py` / `synth.py` / `probe_device.py` /
+  `cli.py` / `run.sh` / `README.md`，外加 `templates/scripts/start-qwen-tts-local.sh`（`--stop` / `--status` / `--fg`）。
+  模型权重与独立 venv **不打包**，可用 `QWEN_TTS_MODEL_PATH` / `QWEN_TTS_VENV` 覆盖。
+  **首次让脚手架能开箱跑本地免费 TTS**（RTF≈2.1，M1 Pro）。
+- **`templates/config.yaml` 默认后端 = `qwen3-local`**（原为 `edge-tts`）；补齐 5 张音色表
+  （`voices` / `voices_minimax` / `voices_qwentts` / `voices_qwen3local` / `voices_fishspeech`）+
+  `tts.fallback_chain: ["edge-tts"]` + 各后端配置块 + `podcast.analytics` 块；
+  项目专有名称（"小搭-斌哥电台" / `binbinao.github.io`）替换为通用占位符。
+- **`tests/test_scaffold_contract.py`（新）**：包内测试 **57 → 98**。覆盖：
+  脚手架资产完整性（src 里的字面量模板引用都存在 + scaffold 确实复制）/ 5 后端全部注册 + 默认后端已注册 +
+  每个后端都有音色表 + build 能路由每个后端 / `polish` 已删且无人引用 / build 只读契约（AST）/
+  C11 门禁可操作（`skeleton` 拦截 + `--skip-humanize` 豁免 + CLI 标记后放行 + `show` 报告）/
+  双 hash 续跑语义 / manifest 双 hash 落盘。
+
+### Changed（SOP 加固回灌 + 模板同步）
+
+- `build.py` / `feed.py` / `prepare.py` / `stages.py` / `tts.py`：把 v1.2.1/1.2.2 的 SOP 加固
+  与真实仓库的工程修复**三方合并**（C11 门禁 + `--skip-humanize` + 双 hash 续跑 + `register_episode(body=...)` +
+  `build_episode_with_fallback` + `emit_phase1/3/5`）。
+- `templates/site/base.html` / `partials/footer.html`：同步真实仓库站点外壳（署名改为通用占位）。
+- `bin/scaffold`：除 `src/` 外补齐复制 `player.js` / `feed.js` / `style.css` / `design-tokens.json` /
+  `templates/scripts/` / `templates/site/`，并对两个 shell 脚本 `chmod +x`；
+  "Next steps" 改写为 qwen3-local 默认 + `mark-humanize-reviewed` 门禁。
+
+### Verified（幂等验收）
+
+- **98/98 单测通过**。
+- **全新 scaffold → 真实构建跑通**：新目录 → C11 门禁正确拦截 `skeleton` → `mark-humanize-reviewed` →
+  build 渲染 → **edge-tts 真实合成 11s mp3** → manifest 双 hash 落盘 → **再跑一遍 build 幂等（0 变化）** →
+  改正文触发重渲、仅改 frontmatter 不触发。
+- **注入探针验证守护测试有效**：移走 `templates/player.js` → 2 个测试正确变红 → 还原后恢复绿。
+
+> ⚠️ **过程教训（已固化）**：对**同一文件**在**同一条消息**里发多个 Edit，后发的会覆盖先发的
+> （本次因此丢失过 `build.py` 的函数签名改动，而调用点改动却保留 → 冒烟才发现
+> `run() got an unexpected keyword argument 'skip_humanize'`）。改签名类改动**必须一次一个**、逐个 grep 验证落地。
+
+---
+
 ## [1.2.2] — 2026-09-21 — 一次真实上线的事故沉淀（**文档层**修正）
 
 > **变更驱动**：用本专家包**真实上线了一集播客**（单集 duo、`qwen3-local` 本地 TTS、GitHub Pages），
@@ -42,7 +117,10 @@
   新增「日志停滞 ≠ 卡死，用服务计数器判活」「长任务必须在主会话跑」。
 - `markdown-podcast-studio-team-lead`：Phase 4 补 C12 还原检查、gh-pages 验收、长任务调度纪律。
 
-### Known Drift（已知漂移 — **待决策，本次未处理**）
+### Known Drift（已知漂移 — ✅ **已在 v1.3.0 解决**）
+
+> ✅ **v1.3.0 已消除此漂移**（见上方 [1.3.0]：三方合并 + 补齐 P0 + 内置本地 TTS）。
+> 以下为当时的记录，保留作为背景。
 
 - 本包 `scripts/src/` 与真实运行仓库已**分叉**：
   - 本包独有：`episode_hash.py` / `error_policy.py` / `metrics.py` / `pii_scan.py` / `polish.py`

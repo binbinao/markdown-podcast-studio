@@ -10,6 +10,9 @@ Thumbs.db
 # WorkBuddy runtime
 .workbuddy-tmp/
 
+# WorkBuddy 预览缓存（present_files 打开 HTML/站点时生成）
+.preview-cache/
+
 # 物理归档目录（冗余备份，独立于 git tag）。见 .archive/README.md
 .archive/
 

@@ -8,5 +8,8 @@ from __future__ import annotations
 from .base import Backend, REGISTRY, register, get_backend  # noqa: F401
 from . import edge  # noqa: F401
 from . import minimax  # noqa: F401
+from . import fishspeech  # noqa: F401
+from . import qwen_tts  # noqa: F401
+from . import qwen3_local  # noqa: F401
 
 __all__ = ["Backend", "REGISTRY", "register", "get_backend"]

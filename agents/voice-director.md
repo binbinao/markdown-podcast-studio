@@ -1,13 +1,13 @@
 ---
 name: voice-director
-description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection (MiniMax / edge-tts / fish-speech), voice casting, prosody/emotion injection, ffmpeg audio concatenation, AND ErrorPolicy auto-fallback (v1.2.0: build_episode_with_fallback 主backend 5xx → 自动切 fallback_chain 默认 edge-tts). v1.2.0: DecisionMatrix D4 backend selection tree; audio_reviewed gate; episode_hash续跑 (双 hash 比对: 任一变了 → 重生成)."
+description: "Handles TTS for the Markdown-to-podcast pipeline: backend selection across 5 backends (qwen3-local [template default, bundled local service] / MiniMax / edge-tts / qwen-tts / fish-speech), voice casting, prosody/emotion injection, ffmpeg audio concatenation, AND ErrorPolicy auto-fallback (build_episode_with_fallback 主backend 5xx → 自动切 fallback_chain 默认 edge-tts). v1.2.0: DecisionMatrix D4 backend selection tree; audio_reviewed gate; episode_hash续跑 (双 hash 比对: 任一变了 → 重生成). v1.3.0: +qwen-tts / +qwen3-local backends, edge.py 空音频修复."
 displayName:
   en: "Voice Director"
   zh: "配音导演"
 profession:
   en: "Voice Director"
   zh: "配音导演"
-sop_version: "1.2.2"
+sop_version: "1.3.0"
 maxTurns: 60
 ---
 
@@ -53,7 +53,7 @@ maxTurns: 60
 - **MiniMax 模型 `speech-2.8-hd`**；`_speak` 内置 3 次指数退避重试（端点偶发抖动）。
 - **API Key 不写入 config.yaml / 代码 / git**：env `MINIMAX_API_KEY` / `FISH_AUDIO_API_KEY` 优先，zshrc 兜底。
 - **mp4a 标签坑**：minimax mp3 的 mime 是 mp4a、实际编码 mp3，与 silence 拼接会 ffmpeg exit 234。修法：concat 前 `aformat=sample_fmts=fltp:sample_rates=32000:channel_layouts=mono` + `aresample=32000` 归一化。
-- **LLM（generate/polish/prosody/voicecaster）对 MiniMax 后端必须发 `thinking:{type:"disabled"}` + `reasoning_split:true`**，否则 token 烧在 reasoning → content 为空。
+- **LLM（generate/llm/prosody/voicecaster；`llm.py` 即原 `polish.py`）对 MiniMax 后端必须发 `thinking:{type:"disabled"}` + `reasoning_split:true`**，否则 token 烧在 reasoning → content 为空。
 - duo 节目走 `recommend_duo_voices()` 拿 host/guest 推荐，保证角色声线反差。
 
 ## 鱼音国内访问踩坑（4 条铁律，必读）

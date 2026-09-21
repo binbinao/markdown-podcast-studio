@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Human-Voice Script Reviser"
   zh: "播客活人感改稿官"
-sop_version: "1.2.2"
+sop_version: "1.3.0"
 maxTurns: 80
 skills:
   - human-writing

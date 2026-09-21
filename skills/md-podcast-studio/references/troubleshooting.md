@@ -48,7 +48,7 @@
 |------|------|------|
 | `import audioop` 报错 | Python 3.13 无 audioop，误用 pydub | 一律 ffmpeg concat（C1）；不要用 pydub |
 | `ffmpeg: command not found` | ffmpeg 非 pip 包 | 系统安装：`brew install ffmpeg`（macOS）/ apt（Linux）；CI 已装 |
-| 测试红 | 改了 build 调 polish | `build` 对草稿只读（C6）；恢复 |
+| 测试红 | 改了 build 调 `llm` | `build` 对草稿只读（C6）；恢复 |
 | 长任务放到 teammate 会话里跑，中途「莫名中断」 | teammate 会话结束会 **SIGKILL** 其子进程 | 长跑构建/合成**必须在主会话后台跑**（或前台等它跑完），不要交给 teammate |
 
 ---

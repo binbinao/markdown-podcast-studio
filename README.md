@@ -1,16 +1,19 @@
 # Markdown Podcast Studio
 
 [![GitHub](https://img.shields.io/badge/github-binbinao%2Fmarkdown--podcast--studio-blue?logo=github)](https://github.com/binbinao/markdown-podcast-studio)
-[![Version](https://img.shields.io/badge/version-v1.2.2-brightgreen)](https://github.com/binbinao/markdown-podcast-studio/releases/tag/v1.2.2)
+[![Version](https://img.shields.io/badge/version-v1.3.0-brightgreen)](https://github.com/binbinao/markdown-podcast-studio/releases/tag/v1.3.0)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Hard Constraint](https://img.shields.io/badge/Hard_Constraint-C12-red?logo=checkmarble&logoColor=white)](./skills/md-podcast-studio/references/hard-constraints.md)
 
-把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 → **卡兹克活人感抛光（v1.2.1 必做强阻断 C11）** → AI 配音（MiniMax / edge-tts / fish-speech 三后端，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
+把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 → **卡兹克活人感抛光（必做强阻断 C11）** → AI 配音（**5 后端**：qwen3-local 本地 / MiniMax / edge-tts / qwen-tts / fish-speech，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
 
-> **当前版本：v1.2.2**（2026-09-21，**文档层修正**）— 用本包真实上线一集播客后的沉淀：
-> 新增硬约束 **C12**（`--force` 是一次性诊断，跑完必须还原）+ **发布验收铁律**（新集必须是 manifest/RSS 第 1 条；
-> 验收看 **gh-pages blob** 而非 HTTP；`index.html` 是 JS 外壳、不可作判据）+ 纠正 C3 的 `max_tokens` 指引
-> （思考型模型需 12000，否则 `content` 为空）。**代码层未变**（`scripts/src/` 仍为 v1.2.1 快照）。
+> **当前版本：v1.3.0**（2026-09-21，**代码 + 模板层**）— 按"**脚手架**"定位重新打包：
+> 本包的 `bin/scaffold` 会把 `scripts/src/` **原样复制**进新工程，所以包内 `src/` 必须是「当前最佳实践、可开箱跑通」的版本。
+> 本次把**真实运行仓库的工程演进**（`polish.py`→`llm.py` 改名、新增 `analytics.py`、TTS 后端 3→5、`edge.py` 空音频修复）
+> 与**本包自己的 SOP 加固**（C11 卡兹克门禁、双 hash 续跑、ErrorPolicy fallback）**三方合并**，并修掉 3 个 P0：
+> 补齐缺失的模板资产（`player.js`/`feed.js`/`style.css`/`design-tokens.json` —— 缺一，scaffold 出的工程一 build 就崩）、
+> 给 `src.stages` 补上真实 CLI（原来 C11 门禁**没有可操作入口**）、补上文档已引用的 `TestBuildReadOnlyContract`。
+> 并**内置本地 TTS 服务**（`templates/scripts/qwen3-tts-local/`），模板默认后端改为 `qwen3-local`。**98 单测全绿**。
 > 详见 [CHANGELOG.md](./CHANGELOG.md)。回滚方式见文末。
 
 ## 类型
@@ -23,7 +26,7 @@ Team 型（多角色协作团队，5 人）
 |---|---|---|
 | 播客制作总监 | — | 编排调度、SOP 推进、汇总回报（RACI A 主理人）|
 | 脚本编辑 | — | prepare 阶段：元数据、三决策门、分集、生成草稿、ai_stage 生命周期（RACI R）|
-| 活人感改稿官 | 卡兹克 | 可选 Phase 1.5：把分集正文改写成"念起来像人在说话"，清模型腔/报告腔/营销腔（RACI R）|
+| 活人感改稿官 | 卡兹克 | **必做** Phase 1.5：把分集正文改写成"念起来像人在说话"，清模型腔/报告腔/营销腔（RACI R）|
 | 配音导演 | — | TTS 阶段：后端选择、选声、prosody、ffmpeg 音频拼接（RACI R）|
 | 发布工程师 | — | build 阶段：质量门禁、shownotes、RSS、暗色站点、gh-pages 部署（RACI R）|
 
@@ -38,7 +41,7 @@ Team 型（多角色协作团队，5 人）
 5. **多门禁字段** — 新增 `humanize_stage`（Phase 1.5 评审）+ `audio_reviewed`（Phase 3 音频评审）
 6. ~~**episode_hash 改名**（v1.1.0，已被 v1.1.1 撤销——真相是 source_hash 本来就是源稿指纹）~~
 7. **并行评审配置** — `parallel_review: bool`（Phase 1.5 与 Phase 2 评审门可并行）
-8. **Metrics + PII 文档化建议** — 每阶段指标 + 草稿出口 PII 扫描（当前文档化，src/ 改造作为 v1.2.0 候选）
+8. **Metrics + PII 文档化建议** — 每阶段指标 + 草稿出口 PII 扫描（v1.2.0 已实际落地）
 
 完整变更清单与变更原因见 [CHANGELOG.md](./CHANGELOG.md)。
 
@@ -53,20 +56,29 @@ Team 型（多角色协作团队，5 人）
 
 **Smoke test 已通过**：全部 9 模块 import + 4 个核心场景验证。
 
+## v1.3.0 关键能力（增量 — 脚手架重打包）
+
+1. **`src/` 三方合并** — 真实仓库演进（`polish.py`→`llm.py` 改名、`analytics.py`、TTS 后端 **3→5**、`edge.py` 空音频修复）+ 本包 SOP 加固（C11 门禁 / 双 hash 续跑 / ErrorPolicy）+ 补齐 3 个 P0
+2. **内置本地 TTS 服务** — `templates/scripts/qwen3-tts-local/`（`server.py`/`synth.py`/`probe_device.py`/`cli.py`/`run.sh`）+ `start-qwen-tts-local.sh`；模型权重与独立 venv 不打包，用 `QWEN_TTS_MODEL_PATH` / `QWEN_TTS_VENV` 覆盖
+3. **模板默认后端 = `qwen3-local`** — 5 张音色表 + `fallback_chain` + 各后端配置块；项目专有名称替换为占位符
+4. **门禁可操作** — `python -m src.stages mark-reviewed|mark-humanize-reviewed|show`（原来只有函数、没有 `main()`）
+5. **守护测试 57 → 98** — 新增 `tests/test_scaffold_contract.py`（脚手架资产完整性 / 5 后端注册与音色表 / `polish` 已删且无人引用 / build 只读契约 AST / C11 门禁可操作 / 双 hash 续跑语义）
+
 ### 兼容性
 
 - `register_episode(..., body="")`：`body` 是 keyword-only，默认 `""`，**老调用方式不受影响**
 - `build_episode_audio(...)`：返回 `(mp3, duration)`，**接口不变**
 - `stages.mark_reviewed(...)` / `prepare_file(...)`：**接口不变**，内部追加新行为
+- ⚠️ **模块改名**：`polish.py` → `llm.py`；`pii_scan.py` 内部引用已同步。若有自定义代码 `from src.polish import ...` 需改为 `from src.llm import ...`
 
 ## 功能
 
 - **智能拆脚本**：基于 frontmatter 三件套（format / voice / split_strategy）+ `plan_episodes(strategy=...)` 拿真实集数。
-- **活人感抛光（可选）**：调度 script-humanizer（卡兹克，`skills: [human-writing]`）把分集正文改成"念起来像人在说话"。
-- **三后端 TTS**：edge-tts（免密 / CI）/ MiniMax（主用，speech-2.8-hd + 3 次重试）/ fish-speech（Fish Audio OpenAudio S2，含国内访问 4 条踩坑修复）。
+- **活人感抛光（必做）**：调度 script-humanizer（卡兹克，`skills: [human-writing]`）把分集正文改成"念起来像人在说话"；build 前强检查 `humanize_stage ∈ {reviewed, frozen}`（C11）。
+- **5 后端 TTS**：qwen3-local（模板默认，本机服务，免密免外网）/ edge-tts（免密 / CI / 兜底）/ MiniMax（云 API，speech-2.8-hd + 3 次重试）/ qwen-tts（阿里云百炼）/ fish-speech（Fish Audio OpenAudio S2，含国内访问 4 条踩坑修复）。
 - **质量门禁**：validate_script 拦 emoji / 零宽 / markdown 粗体 / 链接 / 引用 / 超长。
 - **RSS 2.0 + 暗色站点**：Jinja2 主题 #0b0c10 + #ff7a59 + #7c5cff。
-- **续跑与 CI**：`--skip-audio` 幂等跳过已注册集；`--only ep-XX --force` 单集真合成。
+- **续跑与 CI**：`--skip-audio` 幂等跳过已注册集（双 hash 判据）；`--only ep-XX --force` 单集真合成。
 - **一键部署**：push `output/` → GitHub Actions 用 `--skip-audio` 重渲并部署到 `gh-pages`。
 
 ## 使用示例
@@ -76,11 +88,14 @@ Team 型（多角色协作团队，5 人）
 - 「用双人对话模式重新生成这期节目」
 - 「构建并发布节目站到 GitHub Pages」
 
-## 回滚（四档）
+## 回滚（五档）
 
 ```bash
-# v1.2.2 → v1.2.1（去掉真实上线沉淀的文档层修正：C12 + 发布验收铁律 + C3 max_tokens 纠正）
+# v1.3.0 → v1.2.2（去掉"脚手架重打包"：src/ 三方合并 + templates/ 补齐 + 内置本地 TTS + 98 测试）
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+git checkout v1.2.2 -- .
+
+# v1.2.2 → v1.2.1-patch（去掉真实上线沉淀的文档层修正：C12 + 发布验收铁律 + C3 max_tokens 纠正）
 git checkout v1.2.1-patch -- .
 
 # v1.2.1 → v1.2.0（去掉卡兹克必做强阻断 + 4 候选落地，回到 v1.2.0 卡兹克可选状态）
@@ -100,7 +115,9 @@ rsync -a --delete .archive/v1.0.0/ ./
 rsync -a --delete .archive/v1.2.0/ ./
 ```
 
-> **v1.2.0 src/ 改造向后兼容**：register_episode 的 `body` 是 keyword-only 默认 `""`，build_episode_audio 返回 2 元组（不变），stages.mark_reviewed / prepare_file 接口不变。所以 v1.2.0 → v1.1.1 回滚后，旧调用方式不受影响。
+> **向后兼容**：register_episode 的 `body` 是 keyword-only 默认 `""`，build_episode_audio 返回 2 元组（不变），stages.mark_reviewed / prepare_file 接口不变。v1.3.0 唯一的破坏性改动是模块改名 `polish.py` → `llm.py`。
+>
+> ⚠️ **v1.2.2 的 `src/` 是 v1.2.1 快照**（那版仅改文档）；v1.3.0 才是"代码 + 模板"层。
 
 详见 [.archive/README.md](./.archive/README.md)。
 

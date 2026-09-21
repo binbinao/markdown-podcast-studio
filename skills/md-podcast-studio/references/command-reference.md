@@ -45,7 +45,7 @@ python -m src.build drafts/ --retry-failed   # 只重建缺失 source_hash 的�
 python -m src.build drafts/ --force          # 忽略 source_hash，重建 mp3。⚠️ 见下方副作用警告
 python -m src.build drafts/ --voice VOICE_ID # 覆盖音色（仅 solo）
 ```
-- `run_one` 五步：`[1/5]` 读草稿（只读，不调 polish）→ `[2/5]` parse_script → `[3/5]` validate_script（门禁 BLOCK 抛错）→ `[4/5]` write_shownotes → `[5/5]` register_episode（manifest 写 source_hash 续跑）。
+- `run_one` 五步：`[1/5]` 读草稿（只读，不调 `llm`）→ `[2/5]` parse_script → `[3/5]` validate_script（门禁 BLOCK 抛错）→ `[4/5]` write_shownotes → `[5/5]` register_episode（manifest 写 source_hash + episode_hash 续跑）。
 - 全部成功后渲染 `output/feed.xml`（RSS 2.0）+ `output/index.html`（Jinja2 暗色站点）+ `series/<slug>/ep-XX/episode.mp3`。
 - ⚠️ **`--only` 匹配的是 `ep-XX` 文件名，不是系列 slug**。传 slug 会报「`--only xxx` 找不到对应 draft」。
   要限定系列，就把 draft 目录当位置参数：`python -m src.build drafts/<slug>`。
@@ -90,7 +90,7 @@ git add output drafts && git commit -m "new episodes" && git push
 
 ## 4. 密钥（仅运行时从 env 读取，绝不写进 config/代码/包）
 - `MINIMAX_API_KEY`：MiniMax TTS 端点 `https://api.minimaxi.com/v1/t2a_v2`（模型 `speech-2.8-hd`）。
-- `LLM_API_KEY` / `MINIMAX_API_KEY` / `OPENAI_API_KEY`：generate/polish/prosody/voicecaster 的 LLM 后端（优先级见 hard-constraints）。
+- `LLM_API_KEY` / `MINIMAX_API_KEY` / `OPENAI_API_KEY`：generate/llm/prosody/voicecaster 的 LLM 后端（优先级见 hard-constraints）。
 - edge-tts 后端：无需密钥。
 
 ## 5. 部署

@@ -13,7 +13,7 @@
 
 ## 每阶段 ErrorPolicy 矩阵
 
-| 阶段 | 错误 | 策略 | 实现位置（代码层冻结资产标注）|
+| 阶段 | 错误 | 策略 | 实现位置 |
 |---|---|---|---|
 | Phase 0 脚手架 | `bin/scaffold` 失败 | `STOP_AND_NOTIFY` | `bin/scaffold` |
 | Phase 1 脚本生成 | LLM 429 配额耗尽 | `RETRY_WITH_BACKOFF` (3) | `scripts/src/generate.py` |

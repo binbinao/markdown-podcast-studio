@@ -160,11 +160,11 @@ def _maybe_llm_verify(
     设计：
     1. 默认关闭（llm_verify=false），失败 fallback 正则-only 不阻塞
     2. 开启时：启发式找"上下文疑似姓名" → 调 LLM 确认 → 添加到 matches
-    3. 复用 `polish.llm_complete()`（已有 LLM helper）
+    3. 复用 `llm.llm_complete()`（已有 LLM helper）
 
     cfg.pii 配置：
     - llm_verify: bool（默认 False）
-    - llm_provider / llm_model / llm_api_key_env（透传给 polish.llm_complete）
+    - llm_provider / llm_model / llm_api_key_env（透传给 llm.llm_complete）
     """
     pii_cfg = (cfg or {}).get("pii", {})
     if not pii_cfg.get("llm_verify", False):
@@ -175,9 +175,9 @@ def _maybe_llm_verify(
         return matches, False, None
 
     try:
-        from .polish import llm_complete as _llm_complete
+        from .llm import llm_complete as _llm_complete
     except ImportError:
-        return matches, False, "polish.llm_complete 不可用，llm_verify 跳过"
+        return matches, False, "llm.llm_complete 不可用，llm_verify 跳过"
 
     # 构建 prompt：让 LLM 逐个判断
     numbered = "\n".join(f"{i+1}. {name}" for i, (_, _, name) in suspects)

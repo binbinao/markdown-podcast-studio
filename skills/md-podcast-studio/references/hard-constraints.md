@@ -1,10 +1,12 @@
-# 12 条硬约束（团队必守，v1.2.2）
+# 12 条硬约束（团队必守，v1.3.0）
 
-> 这些约束来自对当前已验证流水线的代码级核实（file:line）。违反会直接导致合成失败、站点异常或重复返工。**代码是冻结资产，包装期不修改逻辑；运行期也不得绕过。**
+> 这些约束来自对当前已验证流水线的代码级核实（file:line）。违反会直接导致合成失败、站点异常或重复返工。**运行期不得绕过。**
 >
 > - v1.2.1 新增 C11 — 卡兹克活人感抛光必做强阻断（build 前必须 humanize_stage ∈ {reviewed, frozen}）。
 > - **v1.2.2 新增 C12 — `--force` 是一次性诊断，跑完必须还原**（2026-09-21 真实上线事故沉淀）；
 >   同时按一次真实上线修正 C3 的 `max_tokens` 指引（思考型模型需 12000）。
+> - **v1.3.0 模块改名** — `polish.py` → **`llm.py`**（C3/C6 的模块名同步更新）。包内 `src/` 已按脚手架定位重打包，
+>   **不再是"冻结资产"**：它是 scaffold 会原样复制进新工程的"当前最佳实践版本"。
 
 ## C1 — 音频拼接用 ffmpeg，不用 pydub
 - Python 3.13 已移除 `audioop`，pydub 不可用（代码里根本不 import pydub）。
@@ -19,7 +21,7 @@
 - 端点 `https://api.minimaxi.com/v1/t2a_v2`，`output_format: hex`，`binascii.unhexlify` 解码。
 - 情绪取自 `prosody.plan_sentences` 首句 emotion。
 
-## C3 — LLM 后端（generate / polish / prosody / voicecaster）
+## C3 — LLM 后端（generate / llm / prosody / voicecaster）
 - OpenAI 兼容 Chat：`base_url + /chat/completions`。
 - `resolve_api_key()` 优先级：`cfg.api_key` → `LLM_API_KEY` → `MINIMAX_API_KEY` → `OPENAI_API_KEY`。
 - **MiniMax 必须发** `thinking: {type: "disabled"}` + `reasoning_split: true`。不发 → token 全烧在 reasoning → content 为空。
@@ -43,7 +45,9 @@
 - 原因：分集用 `---` 分节，残留 `---` 行无法被 edge-tts 合成（报 "No audio was received"），长系列全卡死。
 
 ## C6 — build 对 drafts 只读（**v1.1.1 source_hash 真相澄清**）
-- `run_one` **不得**调 `polish()`（有 AST 测试 `TestBuildReadOnlyContract` 看守：build 一旦 import/call `polish` 即 fail）。
+- `run_one` **不得**调 `llm()`（有 AST 测试 `TestBuildReadOnlyContract` 看守：build 一旦 import/call `llm` 或 `polish` 即 fail）。
+  ⚠️ **改名陷阱**：v1.3.0 把 `polish.py` 改名为 `llm.py`。守护测试若只断言 `polish`，改名后**必然静默通过**
+  （已无人引用它）→ 测试必须**同时覆盖两个名字 + AST 级 Call 节点**，见 `tests/test_scaffold_contract.py`。
 - 草稿是 LLM 产物只读；build 再改会吃掉人工修改、成本翻倍、不可复现。
 - 改草稿必须先 `--mark-reviewed` / `--freeze` 再 build。
 

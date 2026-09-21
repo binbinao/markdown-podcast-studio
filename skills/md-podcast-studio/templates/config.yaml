@@ -1,35 +1,51 @@
 # myPodcast 配置
-# TTS 后端：edge-tts（免费，零依赖，单调）/ minimax（情感/22拟声词，需 API Key）
-# 切换时 voices 与 voices_minimax 对应不同后端使用的音色 ID。
+#
+# TTS 后端（tts.backend 是唯一开关，改它即切换）：
+#   qwen3-local  本机 Qwen3-TTS-12Hz-1.7B-CustomVoice，零成本/离线/可商用（默认）
+#                需先起本地服务：./scripts/start-qwen-tts-local.sh
+#   edge-tts     免费、零依赖、零 key，但语调单调（最省事的兜底）
+#   minimax      云 API，情感/拟声词丰富，需 MINIMAX_API_KEY
+#   qwen-tts     SCNet 云 API（Qwen3-TTS-Instruct-Flash），按字符计费，需 SCNET_API_KEY
+#   fish-speech  Fish Audio OpenAudio S2，需 FISH_AUDIO_API_KEY + 自建 voice model
+#
+# 每个后端用各自的音色表：voices / voices_minimax / voices_qwentts /
+# voices_qwen3local / voices_fishspeech。切换 backend 时音色表随之切换。
 
 podcast:
-  title: "小搭-斌哥电台"
-  author: "小搭 & 斌哥"
+  title: "我的播客"
+  author: "你的名字"
   language: "zh-CN"
-  website: "https://binbinao.github.io/myPodcast"   # 节目站地址（RSS 绝对链接 / Apple 订阅用）
+  website: "https://YOUR-USERNAME.github.io/YOUR-REPO"   # 节目站地址（RSS 绝对链接 / Apple 订阅用）
   description: "把文章、白皮书、长文，变成能听的电台。"   # 全局描述（meta/og/RSS）
-  tagline: "把文章变成能听的电台节目。"                   # 站点 1-2 处的核心 slogan（M2-3 收敛）
-  hero_desc: |                                          # Hero 区 slogan 下方的一段扩展：吸引听众来听
-    一杯咖啡的时间，换一种读法。我们替你把那些值得反复看的文章
-    念完——白皮书、行业分析、长文笔记，拆成十几分钟的音频，
-    随时点开就能听。通勤路上、眼睛累了、想慢下来的时候，
-    让耳朵替你把好内容读完。
-  about: |                                              # M2-3 增 About 人味：主播自述/缘起/节奏
-    小搭电台是「小搭」和「斌哥」自用的个人播客流水线 —— 我们读文章、做笔记，
-    然后让 AI 把值得反复听的部分讲出来，放到这里。不追热点，不做新闻，
-    节奏是「每周或每两周一期」，来源是我们最近在读、值得慢下来读的东西。
-    如果你也喜欢把文章听进去，欢迎订阅。
-  cover: "cover.jpg"               # 节目封面图（og:image）
+  tagline: "把文章变成能听的电台节目。"                   # 站点核心 slogan
+  hero_desc: |                                          # Hero 区 slogan 下方的一段扩展
+    这里写两三句"为什么值得听"，说清节目的定位与节奏。
+    改掉这段占位文字，站点首页会立刻有你的语气。
+  about: |                                              # About 区：主播自述 / 缘起 / 更新节奏
+    这里写节目的自我介绍：谁在做、为什么做、多久更新一期、
+    选材偏好是什么。这段会出现在首页 About 区块。
+  cover: "cover.jpg"               # 节目封面图（og:image），放到 output/ 根目录
   subscribe:                      # 站点"在更多地方听"订阅区块；enabled: false = 隐藏
     enabled: false
 
-# edge-tts 角色音色（zh-CN-XiaoxiaoNeural=女温暖, zh-CN-YunxiNeural=男活力, zh-CN-YunyangNeural=男新闻, zh-CN-XiaoyiNeural=女温柔）
+  # 站点访问统计 (GoatCounter)
+  # provider: goatcounter（https://www.goatcounter.com，免费 hobby 档）
+  # 不配置或 enabled=false 时整个统计模块完全 pass-through，零侵入
+  analytics:
+    enabled: false                      # 默认 false；注册 GC 后改为 true
+    provider: "goatcounter"             # 留作未来扩展点（umami/plausible）
+    code: ""                            # 8 字符 site code，注册后从 GC dashboard 复制
+    api_key: ""                         # GC Settings → "Allow API access" 开关后生成的 token
+
+# edge-tts 角色音色
+# zh-CN-XiaoxiaoNeural=女温暖 / zh-CN-YunxiNeural=男活力
+# zh-CN-YunyangNeural=男新闻 / zh-CN-XiaoyiNeural=女温柔
 voices:
   host: "zh-CN-XiaoxiaoNeural"
   guest: "zh-CN-YunxiNeural"
   default: "zh-CN-XiaoxiaoNeural"
 
-# MiniMax 角色音色（speech-2.8-hd 推荐；详见 src/tts_minimax.py 的 COMMON_ZH_VOICES）
+# MiniMax 角色音色（speech-2.8-hd 推荐；完整清单见 src/backends/minimax.py 的 COMMON_ZH_VOICES）
 # female-yujie 御姐 / female-shaonv 少女 / female-chengshu 成熟 / female-tianmei 甜美
 # male-qn-qingse 青涩青年 / male-qn-jingying 精英青年 / male-qn-badao 霸道青年 / male-qn-daxuesheng 大学生
 # audiobook_male_1/2 男性有声书 / audiobook_female_1/2 女性有声书（适合反思/独白）
@@ -38,20 +54,66 @@ voices_minimax:
   guest: "male-qn-qingse"    # 嘉宾：青涩青年（duo 节目用）
   default: "audiobook_male_1"
 
+# Fish Audio 角色音色（OpenAudio S2 / s2.1-pro-free）
+# 这里的 ID 是 Fish Audio 控制台建的 voice model reference_id（fish.audio/app 创建立即可见）。
+# 没有预置音色：必须先上传参考音频建 voice model，再把它填进来。
+voices_fishspeech:
+  host: ""      # 单人/host 的 reference_id；留空则报错（Fish 必须指定 voice）
+  guest: ""     # 嘉宾的 reference_id（duo 节目用）
+  default: ""   # 兜底
+
+# SCNet Qwen3-TTS 角色音色（Qwen3-TTS-Instruct-Flash）
+# 音色为英文标识；Instruct 版支持 instructions 自然语言控制语气/语速
+# 男: Ethan(晨煦·阳光温暖) Elias(墨讲师·学术) Ryan(甜茶·戏剧) Moon(随性)
+# 女: Cherry(芊悦·阳光) Serena(苏瑶·温柔) Katerina(成熟) Vivian(酷飒)
+voices_qwentts:
+  host: "Ethan"      # 单人/host：阳光温暖男声，标准普通话带北方口音
+  guest: "Serena"    # 嘉宾：温柔女声（duo 节目用）
+  default: "Ethan"
+
+# 本机 Qwen3-TTS 角色音色（Qwen3-TTS-12Hz-1.7B-CustomVoice，9 个预置音色）
+# 服务：./scripts/start-qwen-tts-local.sh   （独立环境，见 qwen3-tts-local/README.md）
+# 女: Vivian(明亮微飒) Serena(温暖柔和) Ono_Anna(日系) Sohee(韩系)
+# 男: Uncle_Fu(醇厚低沉) Dylan(京腔青年) Eric(成都口音) Ryan(英文) Aiden(美式英文)
+# 注意：音色是模型预置的，没有自建音色；想固定自定义音色需另跑 VoiceDesign + Base 克隆
+voices_qwen3local:
+  host: "Uncle_Fu"   # host：醇厚低沉成熟男声
+  guest: "Serena"    # guest：温暖柔和女声
+  default: "Uncle_Fu"
+
 # 音色智能选型（基于文章内容自动选 voice_id）
 # 优先级：frontmatter voice 字段 > LLM 推断(mode=llm 且 api_key 配了) > 启发式规则 > default_voice
-# 文章类型 → 音色映射见 src/voicecaster.py 的 ARTICLE_TYPES
+# ⚠️ voicecaster 的词表是 minimax 专用的；backends 里只有 minimax 会走自动选型，
+#    qwen-tts / qwen3-local 直接用 frontmatter voice 或本后端音色表的 default。
 voicecaster:
   mode: rule                 # rule（零依赖，默认） | llm
-  default_voice: "audiobook_male_1"  # 兜底音色
+  default_voice: "audiobook_male_1"  # 兜底音色（minimax 专用 ID）
 
 # TTS 参数
 tts:
-  backend: "minimax"         # edge-tts | minimax
+  backend: "qwen3-local"     # qwen3-local | edge-tts | minimax | qwen-tts | fish-speech
   rate: "+0%"                # 语速（仅 edge-tts 全局模式用）
   volume: "+0%"              # 音量
   pitch: "+0Hz"
   pause_ms: 600              # 每段之间的停顿(毫秒)
+  # 主后端整体失败时自动切到这些后端（ErrorPolicy FALLBACK_BACKEND）。
+  # 不写 = 默认 [edge-tts]；写 [] = 关闭 fallback。
+  fallback_chain: ["edge-tts"]
+
+  # 本机 Qwen3-TTS 配置（仅当 backend=qwen3-local 时生效）
+  # 需要先起本地服务：./scripts/start-qwen-tts-local.sh
+  # 服务实现体在仓库内 scripts/qwen3-tts-local/（仅模型权重与独立 venv 在仓库外）
+  # 硬件实测：Apple Silicon / MPS / float16，无 NVIDIA 依赖，Apache-2.0 可商用
+  qwen3_local:
+    base_url: "http://127.0.0.1:8100"
+    language: "Chinese"      # Chinese/English/... ；Auto = 自动判定
+    chunk_chars: 200         # 单次请求字符数；块小→进度细→单块失败重试代价小
+    timeout_sec: 900         # 单块超时（M1 Pro 上 200 字约 1-3 分钟）
+    speed: 1.0               # 1.0 = 原速；>1 加快
+    format: "mp3"            # mp3 | wav（服务端编码）
+    instructions: ""         # 全局语气指令（自然语言），如"用沉稳亲和的电台主播腔"
+    use_emotion: true        # 把 prosody emotion 标签翻译成 instruct 注入
+
   # MiniMax 配置（仅当 backend=minimax 时生效）
   minimax:
     base_url: "https://api.minimaxi.com/v1/t2a_v2"
@@ -62,10 +124,42 @@ tts:
     vol: 1.0                 # (0, 10]
     pitch: 0                 # [-12, 12]
 
+  # Fish Audio (OpenAudio S2) 配置（仅当 backend=fish-speech 时生效）
+  fishspeech:
+    base_url: "https://api.fish.audio/v1/tts"
+    # api_key 不推荐写文件，优先用环境变量 FISH_AUDIO_API_KEY
+    api_key: ""
+    model: "s2.1-pro-free"   # s2.1-pro（付费） / s2.1-pro-free（$0 试用）/ s2-pro / s1
+    format: "mp3"            # mp3 / wav / pcm / opus
+    sample_rate: 44100       # opus 默认 48000
+    mp3_bitrate: 128         # kbps；wav/pcm 忽略
+    temperature: 0.7         # [0, 1]
+    top_p: 0.7               # [0, 1]
+    chunk_chars: 1000        # 段内超长按句末标点切
+    timeout_sec: 60
+    # api.fish.audio 在部分网络下不可达；需要时代理，直连留空字符串
+    socks5_proxy: ""
+    # 走 MITM 代理时 Python SSL hostname 校验会失败，本地调试可设 false；直连保留 true
+    verify_ssl: true
+
+  # SCNet Qwen3-TTS 配置（仅当 backend=qwen-tts 时生效）
+  # 端点/参数见 https://www.scnet.cn/ac/openapi/doc/2.0/moduleapi/api/audio/tts.html
+  # 计费按输入字符
+  qwen:
+    base_url: "https://api.scnet.cn/api/llm/v1/audios/generations"
+    # api_key 不推荐写文件，优先用环境变量 SCNET_API_KEY
+    api_key: ""
+    model: "Qwen3-TTS-Instruct-Flash"
+    chunk_chars: 1500        # 段内超长按句末标点切
+    timeout_sec: 120
+    instructions: ""         # 全局音色指令（自然语言）
+    use_emotion: true        # 把 prosody emotion 标签翻译成 instructions 注入
+
 # 韵律规划：缓解单人播客语调单调
 # enable: 是否按句注入 prosody
 # mode:   heuristic(零依赖,按标点规则) | llm(需 llm.api_key)
-# 注：heuristic 输出 emotion(calm/happy/sad/surprised/...)；minimax 用，edge-tts 忽略
+# 注：heuristic 输出 emotion(calm/happy/sad/surprised/...)；
+#     minimax / qwen-tts / qwen3-local 消费它，edge-tts 忽略
 prosody:
   enable: true
   mode: heuristic
@@ -82,19 +176,28 @@ split:
   min_episode_chars: 600    # 小于此字数的章节合并进上一集
   max_episode_chars: 3000   # 单集上限，超出按 H3/段落继续切
 
-# 可选 LLM 润色（推荐开，走 MiniMax 兼容 OpenAI 的 chat 接口）
-# api_key 留空时会自动从 env LLM_API_KEY / MINIMAX_API_KEY / OPENAI_API_KEY 取
-# 端点检测到 "minimax" 字串时会自动加 thinking.disabled + reasoning_split，
-# 避免 MiniMax 模型把 tokens 全部烧在 reasoning 上导致 content 为空
+# 写稿 LLM（OpenAI 兼容 chat 接口）。留空 api_key 也不影响出片——
+# generate 会降级为骨架稿，但**不会静默**：日志里会明确喊出「未经 LLM 改写」。
+#
+# api_key_env 显式声明要读的环境变量名（按顺序），命中即用，不回落到默认列表。
+# 存在的理由：多个 provider 的 key 同时躺在 shell 里时（如 MINIMAX_API_KEY 已欠费、
+# 真正要用的是另一把），默认列表的顺序会取错 key —— 拿到的 key 能过鉴权但配额已尽，
+# 报错极难定位。显式声明把这个隐式依赖变成配置项。
+#
+# ⚠️ 思考型模型（reasoning models）的 reasoning 与正文**共享 max_tokens 预算**：
+#    给 4000 会出现 finish_reason 正常但 content 为空/被截断。给 12000 才稳。
+#    部分端点还要求显式关思考；MiniMax 认 thinking.disabled，另一些端点直接忽略。
 llm:
   enable: true
   base_url: "https://api.minimaxi.com/v1"
-  api_key: ""
+  api_key: ""                                   # 留空 → 从 api_key_env 列出的 env 取
+  api_key_env: ["LLM_API_KEY", "MINIMAX_API_KEY", "OPENAI_API_KEY"]
   model: "MiniMax-M2.5"
   # 单集口播稿目标 ~3000-4000 字（中文口播 ~250 字/分 → 12-16 分钟）。
   # 曾为 1500：截断长稿，是"产出集偏短"的一条成因。
-  max_tokens: 4000
+  max_tokens: 12000
   temperature: 0.7
+  timeout: 300
   # 润色提示词（把书面文改成口语播客稿）
   prompt: |
     你是一名播客文案编辑。把下面的书面内容改写成自然、口语化、适合双人播客朗读的脚本。

@@ -1,7 +1,7 @@
 {
   "name": "markdown-podcast-studio",
-  "version": "1.2.2",
-  "description": "v1.2.2 文档层修正（来自一次真实上线）：新增硬约束 C12（--force 是一次性诊断，跑完必须还原）+ 发布验收铁律（新集必须是 manifest/RSS 第 1 条；验收看 gh-pages blob 而非 HTTP；index.html 是 JS 外壳不可作判据）+ 纠正 C3 max_tokens 指引（思考型模型需 12000，否则 content 为空）。代码层不变：卡兹克必做强阻断（C11）+ humanize_stage 生命周期 + pii_scan.llm_verify + phase5_summary + ErrorPolicy + 57 单测。",
+  "version": "1.3.0",
+  "description": "v1.3.0 按「脚手架」定位重新打包 src/ + templates/（代码 + 模板层）：bin/scaffold 会把 scripts/src 原样复制进新工程，故包内 src 必须是当前最佳实践、可开箱跑通的版本。本次把真实运行仓库的工程演进（polish.py→llm.py 改名、新增 analytics.py、TTS 后端 3→5、edge.py 空音频修复）与本包自己的 SOP 加固（C11 卡兹克门禁、双 hash 续跑、ErrorPolicy fallback）三方合并，并修掉 3 个 P0：补齐缺失的模板资产（player.js/feed.js/style.css/design-tokens.json，缺一则 scaffold 出的工程一 build 就崩）、给 src.stages 补上真实 CLI（原 C11 门禁无可操作入口）、补上文档已引用的 TestBuildReadOnlyContract。并内置本地 TTS 服务（templates/scripts/qwen3-tts-local/），模板默认后端改为 qwen3-local。98 单测全绿。",
   "author": {
     "name": "纪多斌",
     "email": "duobin.ji@example.com"
@@ -38,8 +38,8 @@
     "zh": "Markdown 播客工作室"
   },
   "displayDescription": {
-    "en": "Turn Markdown articles into a published podcast: smart script splitting, REQUIRED Khazix human-voice polish (hard-gate C11), AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.2 (docs-only): new hard-constraint C12 (--force is a one-shot diagnostic that must be reverted) + release-acceptance rules (new episode must be manifest/RSS item #1; verify the gh-pages blob, not HTTP) + corrected reasoning-model max_tokens guidance. Carries v1.2.1's mandatory Khazix, pii_scan.llm_verify, phase5_summary, ErrorPolicy and 57 unit tests.",
-    "zh": "v1.2.2 文档层修正（来自一次真实上线）：新增硬约束 C12（--force 是一次性诊断，跑完必须还原）+ 发布验收铁律（新集必须是 manifest/RSS 第 1 条；验收看 gh-pages blob 而非 HTTP；index.html 是 JS 外壳不可作判据）+ 纠正 C3 max_tokens（思考型模型需 12000）。沿用 v1.2.1：卡兹克必做强阻断 C11 + humanize_stage 生命周期 + llm_verify 中文姓名 + phase5_summary + ErrorPolicy 标准化 + 57 单测。"
+    "en": "Turn Markdown articles into a published podcast: smart script splitting, REQUIRED Khazix human-voice polish (hard-gate C11), AI voice across 5 backends (qwen3-local [bundled local service, template default] / MiniMax / edge-tts / qwen-tts / fish-speech), RSS and a dark-themed site, one-click deploy. v1.3.0 repacks scripts/src + templates per the scaffold positioning: merges the real-project evolution (polish→llm rename, +analytics, 2 new TTS backends, edge.py fix) with this package's SOP hardening (Khazix gate, dual-hash resume, ErrorPolicy fallback); bundles the local qwen3-tts service; fixes the P0 where scaffolded projects crashed on build due to 4 missing template assets; makes the Khazix gate operable via a real src.stages CLI; default TTS backend is now qwen3-local; 98 unit tests.",
+    "zh": "v1.3.0 按「脚手架」定位重新打包 src/ + templates/：把真实运行仓库的工程演进（polish.py→llm.py 改名、+analytics.py、TTS 后端 3→5、edge.py 空音频修复）与本包 SOP 加固（C11 卡兹克门禁 / 双 hash 续跑 / ErrorPolicy fallback）三方合并；修掉 3 个 P0（模板资产缺失导致 scaffold 工程一 build 就崩 / src.stages 无 CLI 使 C11 门禁不可操作 / TestBuildReadOnlyContract 缺失）；内置本地 TTS 服务并令模板默认后端 = qwen3-local；98 单测。沿用：卡兹克必做强阻断 C11 + humanize_stage 生命周期 + llm_verify 中文姓名 + phase5_summary + ErrorPolicy 标准化。"
   },
   "avatar": "avatars/markdown-podcast-studio-team-lead.png",
   "categoryId": "06-ContentCreative",
@@ -52,7 +52,9 @@
     { "en": "Markdown-to-Podcast", "zh": "文字转播客" },
     { "en": "Content Pipeline", "zh": "内容流水线" },
     { "en": "Audio Production", "zh": "音频制作" },
-    { "en": "Required Khazix Gate v1.2.1", "zh": "卡兹克必做强阻断 v1.2.1" }
+    { "en": "Required Khazix Gate v1.2.1", "zh": "卡兹克必做强阻断 v1.2.1" },
+    { "en": "Scaffold-ready v1.3.0", "zh": "脚手架开箱可用 v1.3.0" },
+    { "en": "Bundled Local TTS", "zh": "内置本地 TTS" }
   ],
   "quickPrompts": [
     { "en": "Turn this Markdown into a podcast episode", "zh": "把这篇 Markdown 变成一档播客" },

@@ -63,6 +63,34 @@ def _article_meta(article: str, path: Path, fmt_default: str) -> tuple[str, str,
     return title, fmt, episodes, art_date, explicit_slug
 
 
+def _duo_voices_from_meta(meta: dict[str, Any]) -> tuple[str, str]:
+    """从 frontmatter 解析 duo 的 host/guest 音色，返回 (host, guest)。
+
+    两个来源，显式键优先：
+    1. ``host_voice`` / ``guest_voice`` —— 与 build 读取的 draft frontmatter 同名，
+       仓库里 raw/2026-08-16-nasa-se-handbook.md 等即此写法。
+    2. ``voice`` 标签 ``"host=X / guest=Y"`` —— decisions.py 的交互门正是按这个格式
+       写出来的（``decisions.py`` 的 ``voice_choice = f"host={h} / guest={g}"``）。
+       只认键不认标签，会让"三件套齐全"的 raw 静默丢掉音色。
+
+    回归背景（2026-09-21）：快捷分支曾只读 format/voice/split_strategy，导致 draft
+    frontmatter 缺 host_voice/guest_voice、``_decisions.json`` 记成 ""。因为 build 会
+    回退到 ``voices_<backend>`` 的默认 host/guest，音频结果没暴露问题 —— 但"用户在
+    raw 里显式写了音色却被丢弃"是实打实的信息丢失。
+    """
+    host = str(meta.get("host_voice") or "").strip()
+    guest = str(meta.get("guest_voice") or "").strip()
+    if not (host and guest):
+        m = re.search(
+            r"host\s*=\s*([^\s/]+)\s*/\s*guest\s*=\s*([^\s/]+)",
+            str(meta.get("voice") or ""),
+        )
+        if m:
+            host = host or m.group(1)
+            guest = guest or m.group(2)
+    return host, guest
+
+
 def prepare_file(
     path: Path,
     cfg: dict[str, Any],
@@ -93,13 +121,22 @@ def prepare_file(
     fm_format = str(meta.get("format", "")).lower()
     fm_voice = str(meta.get("voice", "")).strip()
     fm_split = str(meta.get("split_strategy", "")).strip()
+    fm_host, fm_guest = _duo_voices_from_meta(meta)
 
     if fm_format in ("solo", "duo") and fm_voice and fm_split:
         # frontmatter 三件套都齐：尊重用户，不打扰
         log.info(f"  frontmatter 三件套齐全（format={fm_format}/voice={fm_voice}/split={fm_split}），跳过决策门")
+        if fm_format == "duo" and not (fm_host and fm_guest):
+            # 别让它静默丢掉：duo 却没解析出音色时，把可接受的两种写法直接写进日志。
+            log.warning(
+                "  duo 稿的 frontmatter 未解析出 host/guest 音色 → draft 将不写这两项，"
+                "build 只能回退到 voices_<backend> 的默认值。"
+                '修法：写 host_voice/guest_voice 两个键，或让 voice 采用 "host=X / guest=Y" 格式。'
+            )
         from .decisions import Decisions
         decisions = Decisions(
             format=fm_format, voice=fm_voice, voice_type="(frontmatter)",
+            host_voice=fm_host, guest_voice=fm_guest,
             split_strategy=fm_split,
             split_params={"max_episode_chars": cfg.get("split", {}).get("max_episode_chars", 3000)},
             split_count=0,
@@ -115,6 +152,9 @@ def prepare_file(
         # frontmatter 已有但本次重决策 → 决策结果覆盖
         decisions.format = decisions.format or fm_format or "duo"
         decisions.voice = decisions.voice or fm_voice
+        # 音色：决策门结果优先（与 format/voice/split 同一语义），空则用 frontmatter 显式值兜底
+        decisions.host_voice = decisions.host_voice or fm_host
+        decisions.guest_voice = decisions.guest_voice or fm_guest
         decisions.split_strategy = decisions.split_strategy or fm_split or "auto"
 
     # 写决策日志（_decisions.json），与 draft 同目录，方便审计
@@ -150,24 +190,28 @@ def prepare_file(
         if decisions.split_strategy:
             plan.split_strategy = decisions.split_strategy
         script = generate_script(plan, cfg, source_rel)
-        # v1.2.0：PII 扫描（草稿正文落盘前脱敏私人信息）
+        # PII 扫描：草稿正文落盘前脱敏私人信息（姓名/电话/邮箱/身份证…）
+        # best-effort —— 扫描失败只 warn，不阻塞 prepare。
         try:
-            from .pii_scan import process as _pii_process, write_report as _pii_write
             from .episode_hash import split_frontmatter as _split_fm
+            from .pii_scan import process as _pii_process, write_report as _pii_write
+
             _fm, _body = _split_fm(script)
             _pii_res = _pii_process(_body, cfg)
             if _pii_res.has_pii:
                 log.warning(f"  ⚠ PII 扫描发现 {_pii_res.counts}（ep={plan.episode_index}）")
                 # 把脱敏后的正文写回 script
                 script = _fm + _pii_res.redacted_text
-                # 报告写到 drafts/<series>/.pii/ep-XX.json（hidden，不被 build glob 匹配）
+                # 报告写到 drafts/<series>/.pii/ep-XX.json
+                # （点开头，不被 build 的 ep-XX.md glob 命中）
                 _pii_dir = out_dir / ".pii"
                 _pii_write(_pii_res, _pii_dir / f"ep-{plan.episode_index:02d}.json")
         except Exception as e:  # noqa: BLE001 — PII 失败不阻塞 prepare
             log.warning(f"⚠ PII 扫描失败（不影响 prepare）: {e}")
         f = out_dir / draft_filename(plan)
         f.write_text(script, encoding="utf-8")
-        # v1.2.1：初始化 humanize_stage=skeleton（卡兹克必做门禁的前置条件）
+        # 初始化 humanize_stage=skeleton —— C11 卡兹克门禁的前置条件。
+        # 不写这个字段的话 build 会因为「查不到 humanize_stage」直接阻断。
         try:
             from .stages import init_humanize_stage
             init_humanize_stage(f)
@@ -175,14 +219,14 @@ def prepare_file(
             log.warning(f"⚠ init_humanize_stage 失败（不影响 prepare）: {e}")
         made.append(f)
     log.info(f"  {path.name} → 《{series_title}》{len(plans)} 集 → {out_dir}")
-    # v1.2.0：emit_phase1 metrics（output/metrics/<date>/phase1.json）
+    # emit_phase1 metrics（output/metrics/<date>/phase1.json），best-effort
     try:
         from .metrics import emit_phase1
-        fm_format = str(meta.get("format", "")).lower()
-        fm_voice = str(meta.get("voice", "")).strip()
-        fm_split = str(meta.get("split_strategy", "")).strip()
+        _fm_format = str(meta.get("format", "")).lower()
+        _fm_voice = str(meta.get("voice", "")).strip()
+        _fm_split = str(meta.get("split_strategy", "")).strip()
         frontmatter_complete = (
-            fm_format in ("solo", "duo") and bool(fm_voice) and bool(fm_split)
+            _fm_format in ("solo", "duo") and bool(_fm_voice) and bool(_fm_split)
         )
         emit_phase1(
             Path(drafts_dir),
