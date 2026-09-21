@@ -1,7 +1,7 @@
 {
   "name": "markdown-podcast-studio",
-  "version": "1.2.1",
-  "description": "v1.2.1 卡兹克必做强阻断（C11）+ 4 候选落地：humanize_stage 生命周期（skeleton/humanized/reviewed/frozen）+ build 强门禁（--skip-humanize 豁免）+ pii_scan.llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy STOP_NOTIFY/DEGRADE + 57 单测。",
+  "version": "1.2.2",
+  "description": "v1.2.2 文档层修正（来自一次真实上线）：新增硬约束 C12（--force 是一次性诊断，跑完必须还原）+ 发布验收铁律（新集必须是 manifest/RSS 第 1 条；验收看 gh-pages blob 而非 HTTP；index.html 是 JS 外壳不可作判据）+ 纠正 C3 max_tokens 指引（思考型模型需 12000，否则 content 为空）。代码层不变：卡兹克必做强阻断（C11）+ humanize_stage 生命周期 + pii_scan.llm_verify + phase5_summary + ErrorPolicy + 57 单测。",
   "author": {
     "name": "纪多斌",
     "email": "duobin.ji@example.com"
@@ -38,8 +38,8 @@
     "zh": "Markdown 播客工作室"
   },
   "displayDescription": {
-    "en": "Turn Markdown articles into a published podcast: smart script splitting, REQUIRED Khazix human-voice polish (hard-gate C11), AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.1: Khazix mandatory + pii_scan.llm_verify + phase5_summary + ErrorPolicy STOP_NOTIFY/DEGRADE + 57 unit tests.",
-    "zh": "v1.2.1 卡兹克必做强阻断（C11）+ 4 候选落地：humanize_stage 生命周期 + build 强门禁 + llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy 标准化 + 57 单测。功能不变：SOP 元数据 + 5 决策点 + 7×4 RACI + 双 hash 续跑。"
+    "en": "Turn Markdown articles into a published podcast: smart script splitting, REQUIRED Khazix human-voice polish (hard-gate C11), AI voice (MiniMax/edge-tts/fish-speech), RSS and a dark-themed site, one-click deploy. v1.2.2 (docs-only): new hard-constraint C12 (--force is a one-shot diagnostic that must be reverted) + release-acceptance rules (new episode must be manifest/RSS item #1; verify the gh-pages blob, not HTTP) + corrected reasoning-model max_tokens guidance. Carries v1.2.1's mandatory Khazix, pii_scan.llm_verify, phase5_summary, ErrorPolicy and 57 unit tests.",
+    "zh": "v1.2.2 文档层修正（来自一次真实上线）：新增硬约束 C12（--force 是一次性诊断，跑完必须还原）+ 发布验收铁律（新集必须是 manifest/RSS 第 1 条；验收看 gh-pages blob 而非 HTTP；index.html 是 JS 外壳不可作判据）+ 纠正 C3 max_tokens（思考型模型需 12000）。沿用 v1.2.1：卡兹克必做强阻断 C11 + humanize_stage 生命周期 + llm_verify 中文姓名 + phase5_summary + ErrorPolicy 标准化 + 57 单测。"
   },
   "avatar": "avatars/markdown-podcast-studio-team-lead.png",
   "categoryId": "06-ContentCreative",

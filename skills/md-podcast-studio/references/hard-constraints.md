@@ -1,8 +1,10 @@
-# 10 条硬约束（团队必守，v1.2.1）
+# 12 条硬约束（团队必守，v1.2.2）
 
 > 这些约束来自对当前已验证流水线的代码级核实（file:line）。违反会直接导致合成失败、站点异常或重复返工。**代码是冻结资产，包装期不修改逻辑；运行期也不得绕过。**
 >
-> v1.2.1 新增 C11 — 卡兹克活人感抛光必做强阻断（build 前必须 humanize_stage ∈ {reviewed, frozen}）。v1.2.0 是 9 条（C1-C9），v1.2.1 扩展为 10 条（C1-C9 + C11）。
+> - v1.2.1 新增 C11 — 卡兹克活人感抛光必做强阻断（build 前必须 humanize_stage ∈ {reviewed, frozen}）。
+> - **v1.2.2 新增 C12 — `--force` 是一次性诊断，跑完必须还原**（2026-09-21 真实上线事故沉淀）；
+>   同时按一次真实上线修正 C3 的 `max_tokens` 指引（思考型模型需 12000）。
 
 ## C1 — 音频拼接用 ffmpeg，不用 pydub
 - Python 3.13 已移除 `audioop`，pydub 不可用（代码里根本不 import pydub）。
@@ -21,7 +23,15 @@
 - OpenAI 兼容 Chat：`base_url + /chat/completions`。
 - `resolve_api_key()` 优先级：`cfg.api_key` → `LLM_API_KEY` → `MINIMAX_API_KEY` → `OPENAI_API_KEY`。
 - **MiniMax 必须发** `thinking: {type: "disabled"}` + `reasoning_split: true`。不发 → token 全烧在 reasoning → content 为空。
-- 务必从 config 读 `max_tokens`（默认 4000）与 `temperature`（默认 0.7），勿硬编码（曾硬编码导致集数过短）。
+- 务必从 config 读 `max_tokens` 与 `temperature`（默认 0.7），勿硬编码（曾硬编码导致集数过短）。
+- ⚠️ **换用「思考型模型」时 `max_tokens` 必须重估，不能沿用 4000**：reasoning 与正文**共享** `max_tokens` 预算
+  （reasoning 走独立字段 `reasoning_content`，不污染正文，但**要占预算**）。实测 1600 字输入 → reasoning 1044 + 正文 458 tokens，
+  4000 会截断，**12000 才稳**（SCNet `DeepSeek-V4.1-Flash` 的实测配置）。
+  典型症状：`finish_reason` 正常但 **content 为空** —— 就是预算被 reasoning 吃光了。
+- ⚠️ **`thinking:{type:"disabled"}` 不是所有端点都认**：MiniMax 认，**SCNet 忽略**（reasoning 照产）。
+  所以「关思考」这条不能当作省 token 的通用手段。
+- ⚠️ `resolve_api_key()` 还应支持 `cfg.api_key_env`：**显式声明时只认该 env，不回落默认列表**——
+  防止 shell 里躺着别的 provider 的 key 被取错还难查。
 
 ## C4 — frontmatter 用 `yaml.safe_dump`
 - `generate._wrap` 用 `yaml.safe_dump(fm, allow_unicode=True, sort_keys=False, default_flow_style=False, width=4096)`，禁止 f-string 拼 YAML。
@@ -53,6 +63,11 @@
 ## C8 — 决策门跳过规则
 - frontmatter 同时含 `format`+`voice`+`split_strategy` → 跳过三门交互，尊重作者预决策。
 - 否则 `collect_decisions()` 跑 AI 推荐 + 用户终裁。
+- ⚠️ **走快捷分支时，duo 必须同时拿到 `host_voice`/`guest_voice`**（2026-09-21 修）：该分支原先只透传三件套，
+  duo 的 `host_voice`/`guest_voice` 会**静默丢空**。修法：`_duo_voices_from_meta()` 在读显式 key 之余，
+  再解析 `voice: "host=X / guest=Y"` 标签（这个格式 `decisions.py` 一直在**写**、却从没人**读**）。
+  - **为什么危险**：丢了**不报错**——build 会回退到 `voices.*` 的默认 host/guest，产出音频"听起来正常"但**不是你要的音色**。
+  - **验收动作**：过快捷分支后，核 draft 与 `_decisions.json` 里的 `host_voice`/`guest_voice` 是否为你指定的值。
 
 ## C9 — fish-speech 国内访问 4 坑（hosted Fish Audio API）
 - 端点 `POST {base_url}/v1/tts`（默认 `https://api.fish.audio/v1/tts`）；鉴权 `Authorization: Bearer <key>`；**model 经 header 传**（非 body）。
@@ -97,3 +112,36 @@
 - **接入**：`prepare.py:prepare_file()` 草稿落盘前调 `init_humanize_stage(f)`；build 入口强检查。
 - **ErrorPolicy**：卡兹克 LLM 失败 → RETRY(3) → 失败 STOP_AND_NOTIFY（不静默降级到原文）。
 - **不被 C11 阻断的场景**：`--skip-humanize` flag + 用户已显式声明豁免。
+
+## C12 — `--force` 是一次性诊断，跑完必须还原（v1.2.2 新增）
+
+> 来源：2026-09-21 一次真实上线。按旧规程「commit 前必跑 `--skip-audio --force`」执行，结果
+> 在 82 集仓库上凭空产生 ~82 处脏改动 + RSS 顺序错乱，新集从第 1 位掉到第 27 位。
+
+**为什么会这样**：`--force` 绕过续跑判断，让**全部**集数重新走 `register_episode()`，而它结尾是 `eps.insert(0, entry)`。
+
+| 副作用 | 机制 |
+|---|---|
+| 所有 `shownotes.md` 的 `date` 刷成当天 | `feed.py` 取 `meta.get("date", today)`；draft 无 `date:` 时取渲染当天 |
+| manifest / RSS 顺序被打乱 | 全量重注册 = 按 drafts 扫描序倒序重排；`build_feed()` **不排序**，数组顺序即发布顺序 |
+
+**两条硬规则**：
+1. `--skip-audio --force` **仍要跑**（它是验证渲染路径、确认「失败 0」的唯一手段），
+   但**它产出的 output 不是可提交的终态**。
+2. 跑完**必须还原**（`git checkout HEAD -- output/{manifest.json,feed.xml,index.html}` +
+   `git checkout -- output/series/`），再用**不带 `--force`** 的单目录构建重注册新集。
+
+**还原成功的判据**：`git diff HEAD -- output/manifest.json` = **「纯新增、0 删除」**，
+且 manifest 第 1 条 `_key` / `feed.xml` 第 1 个 `<item>` = 新集。
+
+> 完整命令见 `references/troubleshooting.md` §7。
+
+## ⚠ 发布验收铁律（与 C12 配套）
+
+- **顺序语义**：`register_episode()` 是 `insert(0)` → 新集必在 manifest 第 1 位；`build_feed()` **不排序**
+  → RSS 顺序 = manifest 顺序 = 发布顺序。站点首页由**前端**按 series `latest_date` 倒序排。
+- **gh-pages 部署是两段**（① 推分支 ② Pages 异步发布 CDN）→ **只看 HTTP 会把「还没生效」误判为「发布失败」**。
+  权威判据是 `git fetch origin gh-pages` 后的 blob。
+- **gh-pages 上 mp3 必须是裸 blob**（Page 不支持 LFS）。`git cat-file -p origin/gh-pages:<mp3> | head -c4` 应为 `ID3`。
+- **`index.html` 是纯 JS 外壳**（不含任何系列标题，靠 `feed.js` 运行时 fetch manifest）→
+  **不可用「index.html 里有没有新系列标题」作判据**，要查查 `manifest.json`。

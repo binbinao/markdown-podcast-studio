@@ -1,13 +1,16 @@
 # Markdown Podcast Studio
 
 [![GitHub](https://img.shields.io/badge/github-binbinao%2Fmarkdown--podcast--studio-blue?logo=github)](https://github.com/binbinao/markdown-podcast-studio)
-[![Version](https://img.shields.io/badge/version-v1.2.1-brightgreen)](https://github.com/binbinao/markdown-podcast-studio/releases/tag/v1.2.1)
+[![Version](https://img.shields.io/badge/version-v1.2.2-brightgreen)](https://github.com/binbinao/markdown-podcast-studio/releases/tag/v1.2.2)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Hard Constraint](https://img.shields.io/badge/Hard_Constraint-C11-red?logo=checkmarble&logoColor=white)](./skills/md-podcast-studio/references/hard-constraints.md)
+[![Hard Constraint](https://img.shields.io/badge/Hard_Constraint-C12-red?logo=checkmarble&logoColor=white)](./skills/md-podcast-studio/references/hard-constraints.md)
 
 把 Markdown 长文章一键端到端变成上线播客：智能拆脚本 → **卡兹克活人感抛光（v1.2.1 必做强阻断 C11）** → AI 配音（MiniMax / edge-tts / fish-speech 三后端，带 ErrorPolicy 自动 fallback）→ 生成 RSS 与暗色节目站 → 部署 GitHub Pages。
 
-> **当前版本：v1.2.1**（2026-08-20）— 卡兹克从可选升级为必做强阻断（hard-constraint C11）+ 4 候选落地（humanize_stage 生命周期 + llm_verify 中文姓名 + phase5_summary 自动 + ErrorPolicy 标准化）+ 57 单测。
+> **当前版本：v1.2.2**（2026-09-21，**文档层修正**）— 用本包真实上线一集播客后的沉淀：
+> 新增硬约束 **C12**（`--force` 是一次性诊断，跑完必须还原）+ **发布验收铁律**（新集必须是 manifest/RSS 第 1 条；
+> 验收看 **gh-pages blob** 而非 HTTP；`index.html` 是 JS 外壳、不可作判据）+ 纠正 C3 的 `max_tokens` 指引
+> （思考型模型需 12000，否则 `content` 为空）。**代码层未变**（`scripts/src/` 仍为 v1.2.1 快照）。
 > 详见 [CHANGELOG.md](./CHANGELOG.md)。回滚方式见文末。
 
 ## 类型
@@ -76,8 +79,11 @@ Team 型（多角色协作团队，5 人）
 ## 回滚（四档）
 
 ```bash
-# v1.2.1 → v1.2.0（去掉卡兹克必做强阻断 + 4 候选落地，回到 v1.2.0 卡兹克可选状态）
+# v1.2.2 → v1.2.1（去掉真实上线沉淀的文档层修正：C12 + 发布验收铁律 + C3 max_tokens 纠正）
 cd /Users/jiduobin/.workbuddy/plugins/marketplaces/my-experts/plugins/markdown-podcast-studio
+git checkout v1.2.1-patch -- .
+
+# v1.2.1 → v1.2.0（去掉卡兹克必做强阻断 + 4 候选落地，回到 v1.2.0 卡兹克可选状态）
 git checkout v1.2.0 -- .
 
 # v1.2.0 → v1.1.1（去掉 src/ 改造，回到"建议"状态）

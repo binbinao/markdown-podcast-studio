@@ -4,6 +4,57 @@
 
 ---
 
+## [1.2.2] — 2026-09-21 — 一次真实上线的事故沉淀（**文档层**修正）
+
+> **变更驱动**：用本专家包**真实上线了一集播客**（单集 duo、`qwen3-local` 本地 TTS、GitHub Pages），
+> 端到端跑通；过程中发现 3 处「会把人带偏」的问题（2 处误判故障 + 1 处误判通过）→ 沉淀为文档层修正。
+> **变更范围**：`skills/md-podcast-studio/SKILL.md` + `references/{troubleshooting,hard-constraints,command-reference}.md`
+> + `agents/{publishing-engineer,voice-director,markdown-podcast-studio-team-lead}.md`。
+> **`scripts/src/` 未改动**（仍为 v1.2.1 快照，见末尾「已知漂移」）。
+> **回滚**：`git checkout v1.2.1-patch -- .`
+
+### Added
+
+- **hard-constraints C12（新增）— `--force` 是一次性诊断，跑完必须还原**：
+  `--force` 让全部集数重走 `register_episode()`（`eps.insert(0, entry)`）→
+  ① 所有 `shownotes.md` 的 `date` 刷成当天；② manifest/RSS 顺序被打乱（`build_feed()` **不排序**，数组顺序即发布顺序）。
+  实测在 82 集仓库上产生 ~82 处脏改动、新集从第 1 位掉到第 27 位。附完整还原命令与成功判据（diff = 纯新增、0 删除）。
+- **发布验收铁律**（hard-constraints 末节 + troubleshooting §6 + command-reference §6）：
+  顺序语义（新集必在第 1 位）/ gh-pages 两段部署（**权威判据是 `git fetch` 后的 blob，不是 HTTP**）/
+  gh-pages 上 mp3 必须是裸 blob（Pages 不支持 LFS）/ `index.html` 是纯 JS 外壳不可作判据。
+- **troubleshooting §7 交付纪律** 与改写后的「真实验证顺序（commit 前）」（把「还原」列为必做步骤）。
+- 排错新增条目：思考型模型 content 空 / 非交互 shell 不加载 zshrc / `--only` 匹配文件名而非 slug /
+  快捷分支丢 duo 音色 / 长任务在 teammate 会话被 SIGKILL / stdout 块缓冲导致"假卡死" / 整轨静音的检出。
+
+### Fixed（文档层纠正）
+
+- **C3 `max_tokens` 指引**：原文「默认 4000」对**思考型模型**是错的——reasoning 与正文**共享** `max_tokens`，
+  实测 1600 字输入 → reasoning 1044 + 正文 458 tokens，**12000 才稳**；症状是 `finish_reason` 正常但 **content 为空**。
+  另补充：`thinking:{type:"disabled"}` **不是所有端点都认**（MiniMax 认，SCNet 忽略），不能当通用省 token 手段。
+- **C8 决策门跳过规则**：补上「快捷分支必须同时拿到 `host_voice`/`guest_voice`」，并说明
+  **丢失时不报错、build 会静默回退默认音色** → 验收要核 frontmatter。
+- **C3 密钥解析**：补充 `cfg.api_key_env` 语义（显式声明时只认该 env，不回落默认列表）。
+
+### Changed（agents 职责细化）
+
+- `publishing-engineer`：硬约束新增「`--force` 跑完必须还原」「上线验收看 gh-pages blob」「新集必须在第 1 位」。
+- `voice-director`：音频验收从"时长/体积/文件头"升级为**四项**（新增 `ffmpeg -af volumedetect` 排除整轨静音）；
+  新增「日志停滞 ≠ 卡死，用服务计数器判活」「长任务必须在主会话跑」。
+- `markdown-podcast-studio-team-lead`：Phase 4 补 C12 还原检查、gh-pages 验收、长任务调度纪律。
+
+### Known Drift（已知漂移 — **待决策，本次未处理**）
+
+- 本包 `scripts/src/` 与真实运行仓库已**分叉**：
+  - 本包独有：`episode_hash.py` / `error_policy.py` / `metrics.py` / `pii_scan.py` / `polish.py`
+  - 真实仓库独有：`llm.py`（由 `polish.py` 改名而来）/ `analytics.py`
+  - 双方同名文件内容也不同：`build.py`(389 vs 357) / `stages.py`(254 vs 118) / `tts.py`(200 vs 68) /
+    `feed.py` / `prepare.py` / `generate.py` / `prosody.py` / `voicecaster.py`
+  - 真实仓库已支持的 TTS 后端（如 `qwen3-local`）与写稿后端（SCNet DeepSeek-V4.1-Flash）**不在本包 `backends/` 中**
+- ⇒ 从本包 `scaffold` 出的新工程**不会**包含这些演进。**重新打包 `scripts/src/` 是独立动作，需单独评估**
+  （直接覆盖会删掉本包自己的 `episode_hash/metrics/pii_scan/error_policy` 及其 57 个单测）。
+
+---
+
 ## [1.2.1] — 2026-08-20 — 卡兹克必做强阻断 + 4 候选落地
 
 > **变更驱动**：用户要求"继续 v1.2.1 且把卡兹克审稿设定为必做"。这是 v1.2.0 的延伸 + **卡兹克从可选升级为必做强阻断**（hard-constraint C11）。

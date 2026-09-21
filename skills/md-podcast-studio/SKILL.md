@@ -1,15 +1,15 @@
 ---
 # === SOP 元数据（流程治理） ===
 name: md-podcast-studio
-version: 1.2.1
+version: 1.2.2
 owner: script-editor                       # SOP 修改权限归属（PR 评审需 owner + 主理人 + 用户）
-effective_from: 2026-08-20
+effective_from: 2026-09-21
 changelog_ref: ../../../CHANGELOG.md      # 变更日志相对路径
-supersedes: v1.2.0
-description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.1 makes Khazix mandatory, wires pii_scan.llm_verify (Chinese name detection), emits phase5_summary automatically, standardizes ErrorPolicy STOP_NOTIFY/DEGRADE, and adds unit test suite (57 tests)."
+supersedes: v1.2.1
+description: "Self-contained Markdown-to-Podcast pipeline: scaffold a fresh project, split articles into scripts, REQUIRED humanize via Khazix (Phase 1.5, hard-gate C11), direct AI voice (MiniMax / edge-tts / fish-speech), build RSS + dark site, deploy to GitHub Pages. v1.2.2 is a DOCS-ONLY update distilled from a real end-to-end release: new hard-constraint C12 (--force is a one-shot diagnostic and must be reverted), release-acceptance rules (new episode must be manifest/RSS item #1; verify the gh-pages BLOB, not HTTP; index.html is a JS shell and is not a valid probe), and a corrected C3 max_tokens guidance for reasoning models."
 ---
 
-# Markdown Podcast Studio — Skill (v1.2.1)
+# Markdown Podcast Studio — Skill (v1.2.2)
 
 把 Markdown 文章变成可上线播客的完整、可移植流水线。本 skill 自带**已验证可用**的流水线代码与工程模板，能在任意新仓库 scaffold 出一套 Markdown→播客工程。
 
@@ -353,3 +353,40 @@ rsync -a --delete .archive/v1.0.0/ ./
 - **卡兹克门禁场景**：草稿 humanize_stage=skeleton → build 抛 PipelineError ✓；--skip-humanize 豁免 ✓
 - **PII 姓名启发式**：CEO 张三先生 → "张三" ✓；王女士 + 张先生 → 略过（lookbehind 严格）
 - **ErrorPolicy stop_and_notify**：raise PipelineError 含 stage/hint ✓
+
+---
+
+## v1.2.2 治理层新增（**文档层**，来自一次真实上线）
+
+> 本版**不改代码**（`scripts/src/` 仍为 v1.2.1 快照）。它是用本专家包真实上线一集播客后，
+> 把「会把人带偏」的三处认知修正沉淀进文档。
+
+### 1. `--force` 是一次性诊断，不是终态（hard-constraints **C12**）
+- `--force` 让**全部**集数重走 `register_episode()`，而它结尾是 `eps.insert(0, entry)` → 于是：
+  - 所有 `shownotes.md` 的 `date` 被刷成当天（实测 82 集多出 ~82 处脏改动）；
+  - **manifest / RSS 顺序被打乱**（`build_feed()` **不排序**，数组顺序即发布顺序），新集掉出第 1 位。
+- `--skip-audio --force` **仍要跑**（验证渲染路径 + 确认「失败 0」），但**产出的 output 必须还原**再提交。
+- 还原判据：`git diff HEAD -- output/manifest.json` = **纯新增、0 删除**。命令见 `references/troubleshooting.md` §7。
+
+### 2. 发布验收：看 blob，不看 HTTP
+- gh-pages 部署是**两段**（推分支 → Pages **异步**发 CDN）→ `curl` 滞后会把「还没生效」误判成「发布失败」。
+  **权威判据 = `git fetch origin gh-pages` 后的 blob**（`git hash-object` == `git rev-parse origin/gh-pages:<f>`）。
+- gh-pages 上 mp3 必须是**裸 blob**（Pages 不支持 LFS），`head -c4` 应为 `ID3`。
+- ⚠️ **`index.html` 是纯 JS 外壳**（不含任何系列标题，靠 `feed.js` 运行时 fetch `manifest.json`）
+  → **不可用「index.html 里搜不到新系列标题」当故障判据**。
+- **顺序断言**：新集必须落在 manifest 第 1 条 + `feed.xml` 第 1 个 `<item>`。
+
+### 3. 纠正 C3 的 `max_tokens` 指引（思考型模型）
+- reasoning 与正文**共享** `max_tokens`；**4000 会截断，12000 才稳**。
+- 症状：`finish_reason` 正常但 **content 为空**（预算被 reasoning 吃光）。
+- `thinking:{type:"disabled"}` **不是所有端点都认**（MiniMax 认，SCNet 忽略）→ 不能当通用省 token 手段。
+
+### 4. 其它新增排错条目（见 `references/troubleshooting.md`）
+非交互 shell 不加载 `~/.zshrc`（密钥"看似丢失"）/ `--only` 匹配 `ep-XX` **文件名**而非 slug /
+快捷分支丢 duo 音色（**静默降级**，不报错）/ 长任务在 teammate 会话被 SIGKILL /
+stdout 块缓冲导致"假卡死"（判活要用服务计数器）/ 整轨静音的检出（`ffmpeg -af volumedetect`）。
+
+### ⚠️ 已知漂移（待决策）
+本包 `scripts/src/` 与真实运行仓库**已分叉**（本包独有 `episode_hash/metrics/pii_scan/error_policy`，
+真实仓库独有 `llm.py/analytics.py`，且 `build.py`/`stages.py`/`tts.py` 内容不同）。
+⇒ 从本包 scaffold 出的新工程**不会**包含这些演进。**重新打包需单独评估**（详见 `CHANGELOG.md [1.2.2]`）。

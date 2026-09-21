@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Publishing Engineer"
   zh: "发布工程师"
-sop_version: "1.2.1"
+sop_version: "1.2.2"
 maxTurns: 60
 ---
 
@@ -46,7 +46,17 @@ maxTurns: 60
 - **build 对 drafts 只读**：`run_one` 不得调 `polish()`（有 AST 测试 `TestBuildReadOnlyContract` 看守）；改草稿必须先 mark-reviewed/freeze 再 build。
 - **退出码契约**：0 成功 / 1 流水线失败（跳过 RSS/站点重建）/ 2 门禁违规；禁止在 `run_one`/`run` 内 `raise SystemExit`。
 - **`--skip-audio` 幂等**：已注册集整集跳过，产物 0 变更；真验证用 `--only ep-XX --force` 或 `--skip-audio --force`。
-- **commit 前必跑** `python -m src.build drafts/ --skip-audio --force` 必须绿再 push——且 `git status` 必须看到 output/ 有预期变化（绿 ≠ 通过）。
+- **`--force` 是一次性诊断，不是终态（C12，v1.2.2）**：`--skip-audio --force` 仍要跑（验证渲染路径 + 确认「失败 0」），
+  但它会让全部集数重走 `register_episode()`（`insert(0)`）→ **刷掉所有 shownotes 的 `date` 并打乱 manifest/RSS 顺序**。
+  **跑完必须还原**：`git checkout HEAD -- output/{manifest.json,feed.xml,index.html}` + `git checkout -- output/series/`，
+  再用**不带 `--force`** 的单目录构建重注册新集。还原判据 = `git diff HEAD -- output/manifest.json` 为「纯新增、0 删除」。
+- **commit 前必跑** `python -m src.build drafts/ --skip-audio --force` 必须绿再 push——且 `git status` 必须看到 output/ 有**预期的**变化
+  （不是几十个 shownotes 日期漂移）；绿 ≠ 通过，且跑完记得按上一条还原。
+- **上线验收看 gh-pages blob，不看 HTTP（v1.2.2）**：Pages 发布是异步第二段，`curl` 会读到旧副本 → 误判「发布失败」。
+  必须 `git fetch origin gh-pages` 后比对 blob（`git hash-object` == `git rev-parse origin/gh-pages:<f>`）。
+  ⚠️ **`index.html` 是纯 JS 外壳、不含任何系列标题**，不可用「index.html 里搜不到新系列标题」当故障判据。
+- **顺序断言（v1.2.2）**：`register_episode()` 是 `insert(0)`、`build_feed()` **不排序** → **新集必须落在 manifest 第 1 条、`feed.xml` 第 1 个 `<item>`**。
+  若新集不在第 1 位，说明 output 处于 `--force` 的中间态，需按 C12 还原。
 - **`naming_enforce` 未接入 prepare/CI**（文档/代码不一致）：README 写它自动生效，**实际未接**（仅 README、docs、`src/naming_enforce.py`、`src/core.py` 注释、`src/naming.py`、`tests/` 出现 `naming_enforce`）。**不得宣称自动生效**；仅作可选手动步骤 `python -m src.naming_enforce --dry-run/--apply`，作者命名自主、冲突保护 skip+log 绝不覆盖。
 
 ## SendMessage 回传

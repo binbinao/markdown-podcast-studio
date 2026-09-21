@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Script Editor"
   zh: "脚本编辑"
-sop_version: "1.2.1"
+sop_version: "1.2.2"
 maxTurns: 60
 ---
 

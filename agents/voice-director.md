@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Voice Director"
   zh: "配音导演"
-sop_version: "1.2.1"
+sop_version: "1.2.2"
 maxTurns: 60
 ---
 
@@ -24,9 +24,18 @@ maxTurns: 60
 ## 工作流程
 1. 确认密钥/后端：minimax 需 `export MINIMAX_API_KEY=...`；fish-speech 需 `export FISH_AUDIO_API_KEY=...`；edge-tts 无需密钥。
 2. 跑 `python -m src.build drafts/`（或 `TTS_BACKEND=edge-tts python -m src.build drafts/ --skip-audio` 仅重渲）。
-3. 单集真合成调试：`python -m src.build drafts/ --only ep-XX --force`。
+3. 单集真合成调试：`python -m src.build drafts/ --only ep-XX --force`（**`--only` 匹配 `ep-XX` 文件名，不是 slug**）。
 4. 监听 build 日志：重试、拼接、时长（`ffprobe`）。
-5. 通过 SendMessage 把「每集 mp3 路径 + 时长 + 后端/音色摘要」回传主理人。
+   ⚠️ **日志停滞 ≠ 卡死**：`> log 2>&1` 重定向会让 Python **块缓冲**，逐块进度不实时落盘。
+   判活要采样**服务侧计数器**（本地 TTS 服务 `curl -s 127.0.0.1:<port>/health` → `engine.stats.{calls,total_audio_s,last_rtf,errors}`），
+   两次采样有差值即活着。**不要因为"6 分钟没新日志行"就判定卡死并重跑。**
+   ⚠️ **长任务在主会话里跑**：teammate 会话结束会 SIGKILL 其子进程 → 放在自己会话里的长构建会"莫名中断"。
+5. **音频验收（三项都要）**：
+   - `ffprobe`：时长 / 采样率 / 声道；
+   - 文件头：`head -c4`（真实 mp3 应是 `ID3`）；
+   - **`ffmpeg -af volumedetect -f null -`：确认不是整轨静音**（正常语音 `mean≈-24dB` / `max≈-2.6dB`；`max≈-91dB` 即静音）。
+     ⚠️ 「时长/体积/文件头全对」**不能排除静音**——这三项全对但整轨无声是可能发生的，必须实测音量。
+6. 通过 SendMessage 把「每集 mp3 路径 + 时长 + 后端/音色摘要 + 音量实测值」回传主理人。
 
 ## fish-speech 后端（Fish Audio OpenAudio S2）
 - 端点：`POST {base_url}/v1/tts`（默认 `https://api.fish.audio/v1/tts`），鉴权 `Authorization: Bearer <key>`。

@@ -7,7 +7,7 @@ displayName:
 profession:
   en: "Producer Lead"
   zh: "制作总监"
-sop_version: "1.2.1"
+sop_version: "1.2.2"
 maxTurns: 200
 ---
 
@@ -71,6 +71,14 @@ maxTurns: 200
 - build 内的 `run_one` 5 步：读草稿 → `parse_script` → `validate_script`（门禁，BLOCK 则抛错）→ `write_shownotes` → `register_episode`（manifest `source_hash` 续跑，源稿未变则跳过重生成）。
 - 全部成功后渲染 `output/feed.xml`（RSS 2.0）+ `output/index.html`（Jinja2 暗色主题 #0b0c10/#ff7a59/#7c5cff）+ `series/<slug>/ep-XX/episode.mp3`。
 - **真验证信号**：不要凭「build 跑完没报错」判定通过，必须看 `git status` 有无变化；CI/静态部署 `python -m src.build drafts/ --skip-audio --force`（复用 git-LFS 的 mp3，重渲站点）必须绿且有产物变更。
+- ⚠️ **但 `--force` 是一次性诊断，不是终态（C12，v1.2.2）**：它会让全部集数重走 `register_episode()`（`insert(0)`），
+  **刷掉所有 shownotes 的 `date` 并打乱 manifest/RSS 顺序**（实测 82 集多出 ~82 处脏改动、新集从第 1 位掉到第 27 位）。
+  跑完必须由发布工程师还原（`git checkout HEAD -- output/{manifest.json,feed.xml,index.html}` + `git checkout -- output/series/`），
+  再用**非 force** 的单目录构建重注册新集。**主理人验收时要检查「新集是否在 manifest 第 1 位」**——不在就是没还原。
+- **上线验收看 gh-pages blob，不看 HTTP**：Pages 发布是异步第二段，`curl` 会读到旧副本。
+  ⚠️ **`index.html` 是纯 JS 外壳（不含任何系列标题）**，不可用「搜不到新系列标题」当故障判据；要查就查 `manifest.json`。
+- ⚠️ **长任务调度纪律**：耗时的 build/合成**必须由主理人在主会话后台跑**（或前台等它完成），
+  **不要丢给 teammate 会话**——teammate 会话结束会 SIGKILL 其子进程，长构建会"莫名中断"。
 - 部署：push `output/` → GitHub Actions 用 `--skip-audio` 重渲并部署到 `gh-pages`。站点 URL 见 `config.yaml` 的 `podcast.website`。
 
 ### Phase 5：最终报告
